@@ -1,0 +1,174 @@
+# Implements a cell-based Grid - a special sub-type of a directionless and weightless graph structure.
+# Node IDs are [X, Y] Point objects.
+# [0, 0] origin is assumed to be in the upper left, [1, 1] is to the lower right of it.
+# Allows special concepts like "row" and "column" and "straight line along a row/column".
+#
+# Initialization gives you an empty grid. Use #add_cell to populate the grid. By default the new
+# cell will be connected to all four neighbour cells. Use kwargs to :except or :only needed connections.
+class Grid
+  # Key data storage.
+  # Each key is a node (key == name),
+  # and the value set represents the neighbouring nodes.
+  # private attr_reader :structure
+
+  NEIGHBORS = [
+    N = [0, -1].freeze, # North
+    E = [1, 0].freeze, # East
+    S = [0, 1].freeze, # South
+    W = [-1, 0].freeze, # West
+  ].freeze
+
+  def initialize
+    @structure =
+      Hash.new do |hash, key|
+        hash[key] = Set.new
+      end
+  end
+
+  # A shorthand access to underlying has node structure
+  def [](node)
+    structure[node]
+  end
+
+  def nodes
+    structure.keys
+  end
+
+  # adds a new cell node. By default all 4 neighbors, but kwars allow tweaking that.
+  #
+  # @param point Point
+  # @param except Array<neighbor>
+  # @param only Array<neighbor>
+  def add_cell(point, except: nil, only: nil)
+    raise ArgumentError.new("Only one of :except or :only kwards is supported") if !except.nil? && !only.nil?
+
+    neighbors = NEIGHBORS.dup
+
+    if !except.nil?
+      neighbors -= except
+    elsif !only.nil?
+      neighbors &= only
+    end
+
+    raise ArgumentError.new(":except/:only use made a cell have no neighbors") if neighbors.none?
+
+    neighbors.each do |neighbor|
+      neighbor = Point[point.x + neighbor.first, point.y + neighbor.last]
+
+      structure[point] << neighbor
+      structure[neighbor] << point
+    end
+
+    nil
+  end
+
+  # Removes the cell and any connections to it from the neighbors
+  # @return [nil]
+  def remove_cell(cell)
+    structure[cell].each do |other_cell|
+      structure[other_cell] -= [cell]
+    end
+
+    structure.delete(cell)
+
+    nil
+  end
+
+  # @param root/@destination [String] # names of the nodes for which to find path
+  #
+  # @return [Array, nil] # will return an array of nodes from root to destination, or nil if no path exists
+  def dijkstra_shortest_path(root, destination)
+    # When we choose the arbitrary starting parent node we mark it as visited by changing its state in the 'visited' structure.
+    visited = [root].to_set
+
+    parent_node_list = {root => nil}
+
+    # Then, after changing its value from FALSE to TRUE in the "visited" hash, we’d enqueue it.
+    queue = [root]
+
+    # Next, when dequeing the vertex, we need to examine its neighboring nodes, and iterate (loop) through its adjacent linked list.
+    loop do
+      dequeued_node = queue.shift
+      # debug "dequed '#{ dequeued_node }', remaining queue: '#{ queue }'"
+
+      if dequeued_node.nil?
+        return
+        # raise("Queue is empty, but destination not reached!")
+      end
+
+      neighboring_nodes = structure[dequeued_node].sort_by { -structure[_1].size }
+      # debug "neighboring_nodes for #{ dequeued_node }: '#{ neighboring_nodes }'"
+
+      neighboring_nodes.each do |node|
+        # If either of those neighboring nodes hasn’t been visited (doesn’t have a state of TRUE in the “visited” array),
+        # we mark it as visited, and enqueue it.
+        next if visited.include?(node)
+
+        visited << node
+        parent_node_list[node] = dequeued_node
+
+        # debug "parents: #{ parent_node_list }"
+
+        if node == destination
+          # destination reached
+          path = [node]
+
+          loop do
+            parent_node = parent_node_list[path.first]
+
+            return path if parent_node.nil?
+
+            path.unshift(parent_node)
+            # debug "path after update: #{ path }"
+          end
+        else
+          queue << node
+        end
+      end
+    end
+  end
+
+  # Feed in for example shortest path found to get its distance. Useful when comparing routes
+  #
+  # @param path [Array<cell>]
+  # @return Integer
+  def path_length(path)
+    path.size - 1
+  end
+
+  # Assumes neighbouring points. Tells the cardinal direction of the pair.
+  # @return String # one of %w[N E S W]
+  def direction(point_a, point_b)
+    if point_a.x == point_b.x && point_a.y > point_b.y
+      return "N"
+    elsif point_a.x == point_b.x && point_a.y < point_b.y
+      return "S"
+    elsif point_a.y == point_b.y && point_a.x > point_b.x
+      return "W"
+    elsif point_a.y == point_b.y && point_a.x < point_b.x
+      return "E"
+    end
+
+    raise "Hmm, same points?"
+  end
+
+  private
+
+    def structure
+      @structure
+    end
+
+    def initialize_copy(copy)
+      dupped_structure =
+        structure.each_with_object({}) do |(k, v), mem|
+          mem[k] =
+            v.each_with_object({}) do |(sk, sv), smem|
+              smem[sk] = sv.dup
+            end
+        end
+
+      copy.instance_variable_set("@structure", dupped_structure)
+
+      super
+    end
+end
