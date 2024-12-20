@@ -59,4 +59,60 @@ RSpec.describe Grid, instance_name: :grid do
       is_expected.to eq(2)
     end
   end
+
+  describe "#cells_at_distance(point, range)" do
+    subject(:cells_at_distance) { grid.cells_at_distance(Point[0, 0], range) }
+
+    context "when asking for neighbours" do
+      let(:range) { 1..1 }
+
+      it "returns neighbouring cells" do
+        is_expected.to eq([Point[1, 0], Point[0, 1]].to_set)
+      end
+    end
+
+    context "when asking for further cells" do
+      let(:range) { 2..3 }
+
+      it "returns further cells" do
+        is_expected.to eq([Point[2, 0], Point[1, 1], Point[2, 1], Point[0, 2], Point[1, 2]].to_set)
+      end
+    end
+
+    context "when asking for far cells" do
+      let(:range) { 4..5 }
+
+      it "returns far cell(s)" do
+        is_expected.to eq([Point[2, 2]].to_set)
+      end
+    end
+
+    context "when asking for cells way beyond what's in the grid" do
+      let(:range) { 10..11 }
+
+      it "returns nothing" do
+        is_expected.to eq([].to_set)
+      end
+    end
+  end
+
+  describe "#cells_at_diagonal_distance(point, range)" do
+    subject(:cells_at_diagonal_distance) { grid.cells_at_diagonal_distance(Point[0, 0], range) }
+
+    context "when asking for direct diagonal neighbour" do
+      let(:range) { 1..1 }
+
+      it "returns them" do
+        is_expected.to eq([Point[1, 1]].to_set)
+      end
+    end
+
+    context "when asking for moar diagonal neighbours" do
+      let(:range) { 1..3 }
+
+      it "returns them" do
+        is_expected.to eq([Point[1, 1], Point[2, 2]].to_set)
+      end
+    end
+  end
 end

@@ -3,6 +3,7 @@ class Controller
   SOURCES = %w[A B C D].freeze
   ROOT = "ROOT"
   HARVESTER = "HARVESTER"
+  TENTACLE = "TENTACLE"
   WALL = "WALL"
   ORGAN_DIRECTIONS = %w[N E S W X].freeze
 
@@ -14,6 +15,7 @@ class Controller
   attr_reader :my_organs, :my_roots, :my_harvesters
   attr_reader :opp_organs, :opp_roots, :opp_harvesters
   attr_reader :actions
+  attr_reader :cells_of_contention, :width_of_contention
 
   def initialize(width:, height:)
     @width = width
@@ -30,7 +32,7 @@ class Controller
     @entities = entities
     @my_stock = my_stock
     @opp_stock = opp_stock
-    @required_actions = required_actions
+    @required_actions = required_actions; debug "Required actions: #{required_actions}"
     initialize_arena
 
     @sources = entities.select { |coords, entity| SOURCES.include?(entity[:type]) }
@@ -39,14 +41,17 @@ class Controller
     @my_harvesters = entities.select { |coords, entity| entity[:type] == HARVESTER }
     @opp_organs = entities.select { |coords, entity| entity[:owner] == 0 }
     @opp_roots = opp_organs.select { |coords, entity| entity[:type] == ROOT }
+    initialize_cells_of_contention
     @actions = []
 
     @time_taken = 0
     time = Benchmark.realtime do
       debug_stocks
       debug_entities
+
       connect_to_a
-      expand_towards_opp_root unless actions.any?
+      grow_defensive_tentacle unless actions.any?
+      expand_towards_middle unless actions.any?
     end
 
     debug("Took #{(time * 1000).round}ms to execute", 3)
@@ -71,13 +76,88 @@ class Controller
       @actions << "GROW #{my_roots.first.last[:id]} #{path[-3].x} #{path[-3].y} BASIC"
     elsif path.size == 3
       debug("Close source of A detected at #{path.last}, setting up a harvester")
-      @actions << "GROW #{my_roots.first.last[:id]} #{path[-2].x} #{path[-2].y} HARVESTER #{arena.direction(*path.last(2))}"
+      @actions << "GROW #{my_roots.first.last[:id]} #{path[-2].x} #{path[-2].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
     else
       raise "D'oh, source already next to organs"
     end
   end
 
-  def expand_towards_opp_root
+  def grow_defensive_tentacle
+    if width_of_contention == 2
+      battle_cells = contentious_cells_at_distance(1..1) # as in direct neighbor
+      return if battle_cells.none?
+
+      # cells here can have varying "stability", those diagonally away from opponent are poor
+      # candidates for capture since they have more control of them than we do.
+      best_candidates = battle_cells - cells_under_opp_control
+
+      if best_candidates.any?
+        candidate = best_candidates.first
+        path_to_opp = closest_path_to_opp_organs(from: candidate)
+        direction = arena.direction(*path_to_opp.first(2))
+
+        @actions << "GROW #{my_roots.first.last[:id]} #{candidate.x} #{candidate.y} #{TENTACLE} #{direction}"
+      else
+        raise "D'oh, somehow all battle cells are more controlled by opp than us, how?"
+      end
+    else
+      battle_cells = contentious_cells_at_distance(1..2) # as in diagonally away
+      return if battle_cells.none?
+
+      best_candidates = battle_cells - cells_under_opp_control
+
+      if best_candidates.any?
+        candidate = best_candidates.first
+        path_to_candidate = closest_path_to_my_organs(from: candidate).reverse
+        step_towards_candidate = path_to_candidate[1]
+        path_to_opp = closest_path_to_opp_organs(from: step_towards_candidate)
+        direction = arena.direction(*path_to_opp.first(2))
+
+        @actions << "GROW #{my_roots.first.last[:id]} #{step_towards_candidate.x} #{step_towards_candidate.y} #{TENTACLE} #{direction}"
+      else
+        raise "D'oh, somehow all battle cells are more controlled by opp than us, how?"
+      end
+    end
+  end
+
+  def closest_path_to_my_organs(from:)
+    my_organs.keys.filter_map do |my_organ_coords|
+      arena.dijkstra_shortest_path(from, my_organ_coords)
+    end.sort_by(&:size).first
+  end
+
+  def closest_path_to_opp_organs(from:)
+    opp_organs.keys.filter_map do |opp_organ_coords|
+      arena.dijkstra_shortest_path(from, opp_organ_coords)
+    end.sort_by(&:size).first
+  end
+
+  # @return Set<Point>
+  def contentious_cells_at_distance(range)
+    cells_at_distance = Set.new
+
+    my_organs.keys.each do |organ_coord|
+      cells_at_distance += arena.cells_at_distance(organ_coord, range)
+    end
+
+    cells_at_distance & cells_of_contention
+  end
+
+  # For now all cells 1 and diagonally 1 away from any opp organ are in their control
+  #
+  # @return Set<Point>
+  def cells_under_opp_control
+    cells = Set.new
+
+    opp_organs.keys.each do |opp_organ_coords|
+      cells += arena.cells_at_distance(opp_organ_coords, 1..1)
+      cells += arena.cells_at_diagonal_distance(opp_organ_coords, 1..1)
+    end
+
+    cells
+  end
+
+  def expand_towards_middle
     opp_root_coords = Point[opp_roots.first.first.x, opp_roots.first.first.y]
     path = arena.dijkstra_shortest_path(my_roots.first.first, opp_root_coords)
     midpoint = (path.size / 2.0).ceil
@@ -125,6 +205,21 @@ class Controller
 
       @arena.remove_cell(coords)
     end
+
+    nil
+  end
+
+  def initialize_cells_of_contention
+    return if defined?(@cells_of_contention)
+
+    path = arena.dijkstra_shortest_path(my_roots.first.first, opp_roots.first.first)
+
+    midpoint_low = (arena.path_length(path) / 2.0).floor
+    midpoint_high = (arena.path_length(path) / 2.0).ceil
+    range = midpoint_low..midpoint_high
+
+    @cells_of_contention = arena.cells_at_distance(my_roots.first.first, range) & arena.cells_at_distance(opp_roots.first.first, range)
+    @width_of_contention = path.size.even? ? 2 : 1
 
     nil
   end

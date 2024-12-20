@@ -96,6 +96,46 @@ RSpec.describe Controller, instance_name: :controller do
         end
       end
     end
+
+    context "when it's an idealized 6x5 open arena" do
+      let(:width_and_height) { {width: 6, height: 5} }
+
+      let(:options) do
+        {
+          entities: {
+            Point[1, 1] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            Point[2, 1] => {:type=>"BASIC", :owner=>1, :id=>3, :dir=>"N", :parent_id=>1, :root_id=>1},
+            Point[4, 3] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            Point[4, 2] => {:type=>"BASIC", :owner=>0, :id=>4, :dir=>"N", :parent_id=>2, :root_id=>2},
+            **border_walls(**width_and_height)
+          },
+          my_stock: {:a=>50, :b=>50, :c=>50, :d=>0}, opp_stock: {:a=>50, :b=>50, :c=>50, :d=>0}, required_actions: 1
+        }
+      end
+
+      it "initializes correct cells of contention and grows tentacle correctly" do
+        is_expected.to eq(["GROW 1 2 2 TENTACLE E"])
+      end
+    end
+
+    context "when it's an idealized 5x5 open symmetrical arena" do
+      let(:width_and_height) { {width: 5, height: 5} }
+
+      let(:options) do
+        {
+          entities: {
+            Point[1, 1] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            Point[3, 3] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            **border_walls(**width_and_height)
+          },
+          my_stock: {:a=>50, :b=>50, :c=>50, :d=>0}, opp_stock: {:a=>50, :b=>50, :c=>50, :d=>0}, required_actions: 1
+        }
+      end
+
+      it "returns a command to grow a tentacle controlling the centre" do
+        is_expected.to eq(["GROW 1 2 1 TENTACLE S"])
+      end
+    end
   end
 
   # @return Hash

@@ -1,7 +1,7 @@
 # Implements a cell-based Grid - a special sub-type of a directionless and weightless graph structure.
 # Node IDs are [X, Y] Point objects.
 # [0, 0] origin is assumed to be in the upper left, [1, 1] is to the lower right of it.
-# Allows special concepts like "row" and "column" and "straight line along a row/column".
+# Allows special concepts like "row", "column", "straight line along a row/column", and "diagonally".
 #
 # Initialization gives you an empty grid. Use #add_cell to populate the grid. By default the new
 # cell will be connected to all four neighbour cells. Use kwargs to :except or :only needed connections.
@@ -134,6 +134,53 @@ class Grid
   # @return Integer
   def path_length(path)
     path.size - 1
+  end
+
+  # Returns cells that are specified distance away from a given cell. Useful for telling
+  # which cells are covered by a bombard attack 2-3 cells away etc.
+  #
+  # @param range Range
+  # @return Set
+  def cells_at_distance(point, range)
+    visited = Set.new
+    queue = [[point, 0]] # Each element is [current_cell, current_distance]
+    result = Set.new
+
+    while queue.any?
+      current_cell, current_distance = queue.shift
+
+      # Skip if already visited
+      next if visited.include?(current_cell)
+
+      visited.add(current_cell)
+
+      # Add to result if within the range
+      if range.include?(current_distance)
+        result << current_cell
+      end
+
+      # Stop exploring if the current distance exceeds the maximum range
+      next if current_distance > range.max
+
+      # Enqueue all neighbors with incremented distance
+      structure[current_cell].each do |neighbor|
+        queue << [neighbor, current_distance.next]
+      end
+    end
+
+    result
+  end
+
+  def cells_at_diagonal_distance(point, range)
+    diagonal_as_direct_ranges = range.map { (_1 * 2)..(_1 * 2) }
+
+    cells_at_distances = diagonal_as_direct_ranges.map do |range|
+      cells_at_distance(point, range)
+    end.flatten.reduce { |a, b| a += b }
+
+    cells_at_distances.reject do |cell|
+      cell.x == point.x || cell.y == point.y
+    end.to_set
   end
 
   # Assumes neighbouring points. Tells the cardinal direction of the pair.
