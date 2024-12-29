@@ -98,11 +98,12 @@ class Grid
   end
 
   # @param root/@destination [String] # names of the nodes for which to find path
+  # @param excluding Array # a way to disqualify some cells from route consideration
   #
   # @return [Array, nil] # will return an array of nodes from root to destination, or nil if no path exists
-  def dijkstra_shortest_path(root, destination)
+  def dijkstra_shortest_path(root, destination, excluding: nil)
     # When we choose the arbitrary starting parent node we mark it as visited by changing its state in the 'visited' structure.
-    visited = [root].to_set
+    visited = [root, *excluding].to_set
 
     parent_node_list = {root => nil}
 

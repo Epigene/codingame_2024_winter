@@ -58,6 +58,7 @@ class Controller
     time = Benchmark.realtime do
       debug_stocks
       debug_entities
+      # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
         connect_to_a(coords, root) if i.zero?
@@ -137,22 +138,22 @@ class Controller
         harvester_locations = arena.cells_at_distance(path.last, 1..1) - Entity.organs.keys
       end
 
+      debug("Harvester locations are: #{harvester_locations}")
+
       clean_arena = arena_without_source_cells
 
-      paths = harvester_locations.filter_map { clean_arena.dijkstra_shortest_path(path.first, _1) }.reject { _1.include?(path.last) }
+      paths = harvester_locations.filter_map { clean_arena.dijkstra_shortest_path(coords, _1) }
 
       if paths.none?
         debug("No paths to nearby A without stepping on other protein sources :/")
-        paths = harvester_locations.filter_map { arena.dijkstra_shortest_path(path.first, _1) }.reject { _1.include?(path.last) }
+        paths = harvester_locations.filter_map { arena.dijkstra_shortest_path(coords, _1, excluding: [path.last]) }
       end
+
+      debug("Paths to harvester locations are: #{paths}")
 
       shortest_path = paths.sort_by { _1.size }.first
 
-      if paths.first.size < 4
-        @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{shortest_path[1].x} #{shortest_path[1].y} #{BASIC}"
-      else
-        raise("Hmm, path to A without stepping on other sources seems very far.")
-      end
+      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{shortest_path[1].x} #{shortest_path[1].y} #{BASIC}"
     end
   end
 
@@ -420,6 +421,13 @@ class Controller
     debug "Entities:"
     @entities.each_pair do |coords, entity|
       debug("#{coords} => #{entity},") if entity[:type] != WALL
+    end
+  end
+
+  def debug_walls
+    debug "Walls:"
+    @entities.each_pair do |coords, entity|
+      debug("#{coords} => #{entity},") if entity[:type] == WALL
     end
   end
 
