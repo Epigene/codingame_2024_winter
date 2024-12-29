@@ -51,6 +51,22 @@ class Point
     self == other
   end
 
+  def w
+    Point[x-1, y]
+  end
+
+  def e
+    Point[x.next, y]
+  end
+
+  def n
+    Point[x, y.next]
+  end
+
+  def s
+    Point[x, y-1]
+  end
+
   def hash
     [x, y].hash
   end

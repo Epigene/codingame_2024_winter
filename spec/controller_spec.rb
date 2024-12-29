@@ -5,6 +5,25 @@ RSpec.describe Controller, instance_name: :controller do
   describe "#call(entities:, my_stock:, opp_stock:, required_actions:)" do
     subject(:call) { controller.call(**options) }
 
+    context "when initializing an arena without border walls at all" do
+      let(:width_and_height) { {width: 2, height: 2} }
+
+      let(:options) do
+        {
+          entities: {
+            Point[0, 0] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            Point[1, 1] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+          },
+          my_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, required_actions: 1
+        }
+      end
+
+      it "returns a command to grow in any ot the two available cells" do
+        is_expected.to eq(["GROW 1 1 0 BASIC"])
+        expect(controller.arena.nodes.size).to eq(4)
+      end
+    end
+
     context "when it's wood-3 simple case of one close A source" do
       context "when just starting out" do
         let(:options) do
@@ -95,6 +114,49 @@ RSpec.describe Controller, instance_name: :controller do
           is_expected.to eq(["GROW 6 16 5 BASIC"])
         end
       end
+
+      context "when spawning next to an A source" do
+        let(:options) do
+          {
+            entities: {
+              Point[1, 2] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+              Point[2, 2] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 6] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+              Point[2, 6] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              **wall_line([1, 4], [15, 4]),
+              **border_walls(**width_and_height)
+            },
+            my_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, required_actions: 1
+          }
+        end
+
+        it "returns a command to loop around to get at it" do
+          is_expected.to eq(["GROW 1 1 1 BASIC"])
+        end
+      end
+
+      context "when spawned next to A source and grew to the side to be able to place harvester" do
+        let(:options) do
+          {
+            entities: {
+              Point[1, 2] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+              Point[1, 1] => {:type=>"BASIC", :owner=>1, :id=>3, :dir=>"N", :parent_id=>1, :root_id=>1},
+              Point[2, 2] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 6] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+              Point[2, 6] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              **wall_line([1, 4], [15, 4]),
+              **border_walls(**width_and_height)
+            },
+            my_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, required_actions: 1
+          }
+        end
+
+        it "returns a command to grow the harvester" do
+          is_expected.to eq(["GROW 3 2 1 HARVESTER S"])
+        end
+      end
     end
 
     context "when it's an idealized 6x5 open arena" do
@@ -134,6 +196,7 @@ RSpec.describe Controller, instance_name: :controller do
 
       it "returns a command to grow a tentacle controlling the centre" do
         is_expected.to eq(["GROW 1 1 2 TENTACLE E"])
+        expect(controller.arena.nodes.size).to eq(9)
       end
     end
 
@@ -198,6 +261,89 @@ RSpec.describe Controller, instance_name: :controller do
 
       it "returns a quiet command to grow in the secured back-area starting from closest to contention" do
         is_expected.to eq(["GROW 1 1 2 BASIC"])
+      end
+    end
+
+    context "when it's wood-1 sporing 18x9 arena" do
+      let(:width_and_height) { {width: 18, height: 9} }
+
+      context "when the very start, need to grow a sporer" do
+        let(:options) do
+          {
+            entities: {
+              Point[15, 1] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 2] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+              Point[15, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 6] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+              **border_walls(**width_and_height),
+              **wall_line([1, 4], [15, 4]),
+            },
+            my_stock: {:a=>6, :b=>2, :c=>2, :d=>3}, opp_stock: {:a=>6, :b=>2, :c=>2, :d=>3}, required_actions: 1
+          }
+        end
+
+        it "returns a command to grow a sporer in correct position" do
+          is_expected.to eq(["GROW 1 1 3 SPORER E"])
+        end
+      end
+
+      context "when the 2nd move, need to spore a new root at predetermined position" do
+        let(:options) do
+          {
+            entities: {
+              Point[15, 1] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 2] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+              Point[1, 3] => {:type=>"SPORER", :owner=>1, :id=>3, :dir=>"E", :parent_id=>1, :root_id=>1},
+              Point[1, 5] => {:type=>"SPORER", :owner=>0, :id=>4, :dir=>"E", :parent_id=>2, :root_id=>2},
+              Point[15, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 6] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+              **border_walls(**width_and_height),
+              **wall_line([1, 4], [15, 4]),
+            },
+            my_stock: {:a=>6, :b=>1, :c=>2, :d=>2}, opp_stock: {:a=>6, :b=>1, :c=>2, :d=>2}, required_actions: 1
+          }
+        end
+
+        before do
+          allow(controller).to receive(:new_root_for_next_turn) do
+            {
+              new_root_cell: Point[15, 3],
+              sporer_cell: Point[1, 3]
+            }
+          end
+        end
+
+        it "returns a command to spore a new root" do
+          is_expected.to eq(["SPORE 3 15 3"])
+        end
+      end
+
+      context "when the 3rd move, need to grow a harvester from new root" do
+        let(:options) do
+          {
+            entities: {
+              Point[15, 1] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[1, 2] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+              Point[1, 3] => {:type=>"SPORER", :owner=>1, :id=>3, :dir=>"E", :parent_id=>1, :root_id=>1},
+              Point[15, 3] => {:type=>"ROOT", :owner=>1, :id=>5, :dir=>"N", :parent_id=>0, :root_id=>5},
+              Point[1, 5] => {:type=>"SPORER", :owner=>0, :id=>4, :dir=>"E", :parent_id=>2, :root_id=>2},
+              Point[15, 5] => {:type=>"ROOT", :owner=>0, :id=>6, :dir=>"N", :parent_id=>0, :root_id=>6},
+              Point[1, 6] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+              **border_walls(**width_and_height),
+              **wall_line([1, 4], [15, 4]),
+            },
+            my_stock: {:a=>5, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>5, :b=>0, :c=>1, :d=>1}, required_actions: 2
+          }
+        end
+
+        it "returns a command to grow harvester" do
+          is_expected.to eq(
+            [
+              "GROW 3 16 5 BASIC",
+              "GROW 5 15 2 HARVESTER N",
+            ]
+          )
+        end
       end
     end
   end

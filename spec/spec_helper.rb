@@ -17,3 +17,5 @@ RSpec.configure do |config|
     stub_const("LOG_LEVEL", 2)
   end
 end
+
+RSpec::Matchers.define_negated_matcher :not_change, :change

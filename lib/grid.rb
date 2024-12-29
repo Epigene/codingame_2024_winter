@@ -25,6 +25,16 @@ class Grid
       end
   end
 
+  # Returns a new
+  # @return Grid
+  def dup
+    duplicate = self.class.new
+    new_structure = {}
+    nodes.each { new_structure[_1] = self[_1].dup }
+    duplicate.instance_variable_set("@structure", new_structure)
+    duplicate
+  end
+
   # A shorthand access to underlying has node structure
   def [](node)
     structure[node]
@@ -62,9 +72,21 @@ class Grid
     nil
   end
 
+  # Removes a list of cells and any connections to it from the neighbors
+  # @return [nil]
+  def remove_cells(cells)
+    cells.each do |cell|
+      remove_cell(cell)
+    end
+
+    nil
+  end
+
   # Removes the cell and any connections to it from the neighbors
   # @return [nil]
   def remove_cell(cell)
+    return if structure[cell].nil?
+
     structure[cell].each do |other_cell|
       structure[other_cell] -= [cell]
       structure.delete(other_cell) if structure[other_cell].none?
@@ -184,7 +206,7 @@ class Grid
     end.to_set
   end
 
-  # Assumes neighbouring points. Tells the cardinal direction of the pair.
+  # Assumes points on at least same row/column. Tells the cardinal direction of the pair.
   # @return String # one of %w[N E S W]
   def direction(point_a, point_b)
     if point_a.x == point_b.x && point_a.y > point_b.y
@@ -204,19 +226,5 @@ class Grid
 
     def structure
       @structure
-    end
-
-    def initialize_copy(copy)
-      dupped_structure =
-        structure.each_with_object({}) do |(k, v), mem|
-          mem[k] =
-            v.each_with_object({}) do |(sk, sv), smem|
-              smem[sk] = sv.dup
-            end
-        end
-
-      copy.instance_variable_set("@structure", dupped_structure)
-
-      super
     end
 end

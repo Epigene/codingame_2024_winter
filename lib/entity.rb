@@ -6,6 +6,7 @@ class Entity
   ROOT = "ROOT"
   BASIC = "BASIC"
   HARVESTER = "HARVESTER"
+  SPORER = "SPORER"
   TENTACLE = "TENTACLE"
   WALL = "WALL"
   ORGAN_DIRECTIONS = %w[N E S W X].freeze
@@ -19,11 +20,18 @@ class Entity
   end
 
   def self.walls
-    binding.pry
+    all.select { |coords, entity| entity[:type] == WALL }
   end
 
   def self.sources
     all.select { |coords, entity| SOURCES.include?(entity[:type]) }
+  end
+
+  # Differs from .sources in that sources already harvested by me are omitted
+  def self.available_sources
+    cells_harvested = my_harvesters.map { |k, v| new(k, v).harvested_cell }
+
+    sources.except(*cells_harvested)
   end
 
   def self.organs
@@ -35,6 +43,38 @@ class Entity
   end
 
   def self.my_roots
-    my_organs.select { |coords, entity| entity[:type] == ROOT }
+    my_organs.select { |coords, entity| entity[:type] == ROOT }.sort_by { |_, root| root[:id ]}
+  end
+
+  def self.my_harvesters
+    my_organs.select { |coords, entity| entity[:type] == HARVESTER }.sort_by { |_, root| root[:id ]}
+  end
+
+  #== instance methods ==
+
+  def self.new(coords, data)
+    return super unless self == Entity
+
+    if data[:type] == HARVESTER
+      Harvester.new(coords, data)
+    else
+      super
+    end
+  end
+
+  attr_reader :coords, :data
+
+  def initialize(coords, data)
+    @coords = coords
+    @data = data
+  end
+end
+
+class Organ < Entity
+end
+
+class Harvester < Organ
+  def harvested_cell
+    coords.send(data[:dir].downcase)
   end
 end

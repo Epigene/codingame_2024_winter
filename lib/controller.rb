@@ -4,9 +4,18 @@ class Controller
   ROOT = "ROOT"
   BASIC = "BASIC"
   HARVESTER = "HARVESTER"
+  SPORER = "SPORER"
   TENTACLE = "TENTACLE"
   WALL = "WALL"
   ORGAN_DIRECTIONS = %w[N E S W X].freeze
+
+  COSTS = {
+    BASIC => {a: 1, b: 0, c: 0, d: 0},
+    HARVESTER => {a: 0, b: 0, c: 1, d: 1},
+    TENTACLE=> {a: 0, b: 1, c: 1, d: 0},
+    SPORER=> {a: 0, b: 1, c: 0, d: 1},
+    ROOT=> {a: 1, b: 1, c: 1, d: 1},
+  }
 
   attr_reader :width, :height
   attr_reader :entities, :my_stock, :opp_stock, :required_actions
@@ -16,6 +25,7 @@ class Controller
   attr_reader :opp_organs, :opp_roots, :opp_harvesters
   attr_reader :actions
   attr_reader :cells_of_contention, :width_of_contention
+  attr_reader :new_root_for_next_turn # memo for multi-move strat
 
   def initialize(width:, height:)
     @width = width
@@ -40,7 +50,7 @@ class Controller
     @my_roots = Entity.my_roots # my_organs.select { |coords, entity| entity[:type] == ROOT }
     @my_harvesters = entities.select { |coords, entity| entity[:type] == HARVESTER }
     @opp_organs = entities.select { |coords, entity| entity[:owner] == 0 }
-    @opp_roots = opp_organs.select { |coords, entity| entity[:type] == ROOT }
+    @opp_roots = opp_organs.select { |coords, entity| entity[:type] == ROOT }.sort_by { |_, root| root[:id ]}
     initialize_cells_of_contention
     @actions = []
 
@@ -49,41 +59,136 @@ class Controller
       debug_stocks
       debug_entities
 
-      connect_to_a
-      grow_defensive_tentacle unless actions.any?
-      expand_towards_middle unless actions.any?
-      grow_in_closest_empty_cell unless actions.any?
+      my_roots.to_a.reverse.each.with_index do |(coords, root), i|
+        connect_to_a(coords, root) if i.zero?
+        grow_defensive_tentacle(coords, root) if actions.size < i.next && i.zero? # only furthest grows tentacles
+        expand_towards_middle(coords, root) unless actions.size >= i.next
+        grow_in_closest_empty_cell(coords, root) unless actions.size >= i.next
+      end
     end
 
     debug("Took #{(time * 1000).round}ms to execute", 3)
 
-    actions
+    actions.reverse
   end
 
   private
 
-  def connect_to_a
+  def connect_to_a(coords, root)
     if my_harvesters.any?
       debug("Source of A being harvested, moving on with the strat.")
       return
     end
 
-    path = path_to_closest_A(from: my_roots.first)
+    path = path_to_closest_A(from: [coords, root])
 
     return if path.nil?
 
-    if path.size > 3
+    if new_root_for_next_turn
+      sporer = Entity.my_organs[new_root_for_next_turn[:sporer_cell]]
+      new_root_cell = new_root_for_next_turn[:new_root_cell]
+      @actions << "SPORE #{sporer[:id]} #{new_root_cell.x} #{new_root_cell.y}"
+
+      @new_root_for_next_turn = nil
+    elsif path.size > 6 && can_afford_new_colony? # sporing good idea
+      debug("Detected far A source, sporing")
+
+      places_for_new_root = arena.cells_at_distance(path.last, 2..2)
+
+      new_root_cell =
+        (places_for_new_root & cells_on_same_row_or_column_as_i_can_reach).sort_by do |cell|
+          arena.dijkstra_shortest_path(cell, coords).size
+        end.last
+
+      if new_root_cell.nil?
+        debug("Hmm, A sources are far, and I can't seem to spore to any of them (diff of more than 2 in both x and y)")
+        return
+      end
+
+      cell_to_grow_spore = cells_next_to_my_organs.find { |cell| cell.x == new_root_cell.x || cell.y == new_root_cell.y }
+
+      raise("D'oh, can't seem to be able to spore to protein source right away.") if cell_to_grow_spore.nil?
+
+      parent_cell = (arena.cells_at_distance(cell_to_grow_spore, 1..1) & Entity.my_organs.keys).first
+      direction = arena.direction(cell_to_grow_spore, new_root_cell)
+
+      @actions << "GROW #{Entity.my_organs[parent_cell][:id]} #{cell_to_grow_spore.x} #{cell_to_grow_spore.y} #{SPORER} #{direction}"
+      @new_root_for_next_turn = {
+        new_root_cell: new_root_cell,
+        sporer_cell: cell_to_grow_spore
+      }
+    elsif path.size > 3
       debug("Close source of A detected at #{path.last}, growing towards it")
-      @actions << "GROW #{my_latest_organ.last[:id]} #{path[-3].x} #{path[-3].y} BASIC"
+      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-3].x} #{path[-3].y} BASIC"
+    elsif (cells = cells_for_harvester(root, source_type: "A")).one?
+      debug("Source of A already next-door detected at #{path.last}, setting up a harvester")
+      direction = arena.direction(cells.first, path.last)
+      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{cells.first.x} #{cells.first.y} #{HARVESTER} #{direction}"
     elsif path.size == 3
       debug("Close source of A detected at #{path.last}, setting up a harvester")
-      @actions << "GROW #{my_latest_organ.last[:id]} #{path[-2].x} #{path[-2].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
-    else
-      raise "D'oh, source already next to organs"
+      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-2].x} #{path[-2].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
+    else # spawned next to A looks like
+      debug("Looks like spawned next to A source, looping")
+      harvester_locations = arena.cells_at_distance(path.last, 1..1) - Entity.all.keys
+      clean_arena = arena_without_source_cells
+
+      paths = harvester_locations.map { clean_arena.dijkstra_shortest_path(path.first, _1) }
+        .sort_by { _1.size }
+
+      if paths.none?
+        debug("No paths to nearby A without stepping on other protein sources :/")
+        paths = harvester_locations.map { arena.dijkstra_shortest_path(path.first, _1) }
+          .sort_by { _1.size }
+      end
+
+      shortest_path = paths.first
+
+      if paths.first.size < 4
+        @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{shortest_path[1].x} #{shortest_path[1].y} #{BASIC}"
+      else
+        raise("Hmm, path to A without stepping on other sources seems very far.")
+      end
     end
   end
 
-  def grow_defensive_tentacle
+  # Lists nearby cells where we can just place a harvester for a particular protein.
+  #
+  # @return Set<Point>
+  def cells_for_harvester(root, source_type: "A")
+    cells_next_to_my_organs(root_id: root[:id]) & cells_next_to_available_source(source_type: source_type)
+  end
+
+  # @return Set<Point>
+  def cells_next_to_available_source(source_type:)
+    Entity.available_sources
+      .select { |k, v| v[:type] == source_type }
+      .each_with_object(Set.new) do |(k, v), mem|
+        mem.merge(arena.cells_at_distance(k, 1..1))
+      end
+  end
+
+  # A sparser arena where cells with organs or protein sources are forbidden for pathfinding
+  def arena_without_source_cells
+    arena.dup.tap { _1.remove_cells(Entity.sources.keys) }
+  end
+
+  # Useful for determining where to put a sporer for a new colony
+  #
+  # @return Set<Point>
+  def cells_on_same_row_or_column_as_i_can_reach
+    x_i_can_reach = cells_next_to_my_organs.map { _1.x }.to_set
+    y_i_can_reach = cells_next_to_my_organs.map { _1.y }.to_set
+
+    arena.nodes.each_with_object(Set.new) do |cell, mem|
+      next unless x_i_can_reach.include?(cell.x) || y_i_can_reach.include?(cell.y)
+
+      mem << cell
+    end
+  end
+
+  def grow_defensive_tentacle(coords, root)
+    return unless can_afford?(**COSTS[TENTACLE])
+
     if width_of_contention == 2
       battle_cells = contentious_cells_at_distance(1..1) # as in direct neighbor
       return if battle_cells.none?
@@ -98,9 +203,9 @@ class Controller
         path_to_opp = closest_path_to_opp_organs(from: candidate)
         direction = arena.direction(*path_to_opp.first(2))
 
-        @actions << "GROW #{my_latest_organ.last[:id]} #{candidate.x} #{candidate.y} #{TENTACLE} #{direction}"
+        @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{candidate.x} #{candidate.y} #{TENTACLE} #{direction}"
       else
-        raise "D'oh, somehow all battle cells are more controlled by opp than us, how?"
+        debug("D'oh, somehow all battle cells are more controlled by opp than us, how?")
       end
     else
       battle_cells = contentious_cells_at_distance(1..2) # as in diagonally away
@@ -116,17 +221,19 @@ class Controller
         path_to_opp = closest_path_to_opp_organs(from: step_towards_candidate)
         direction = arena.direction(*path_to_opp.first(2))
 
-        @actions << "GROW #{my_latest_organ.last[:id]} #{step_towards_candidate.x} #{step_towards_candidate.y} #{TENTACLE} #{direction}"
+        @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{step_towards_candidate.x} #{step_towards_candidate.y} #{TENTACLE} #{direction}"
       else
-        raise "D'oh, somehow all battle cells are more controlled by opp than us, how?"
+        debug("D'oh, somehow all battle cells are more controlled by opp than us, how?")
       end
     end
   end
 
   # Backfilling action. Once we've established teritorrial dominance, just grow in backyard.
-  def grow_in_closest_empty_cell
+  def grow_in_closest_empty_cell(coords, root)
     growth_cell = cells_for_my_expansion.first
     return unless growth_cell
+
+    debug("Peacibly growing in the backyard")
 
     lowest_id_neighbor = Entity.my_organs.slice(*arena.cells_at_distance(growth_cell, 1..1))
       .sort_by { |coords, entity| entity[:id] }.first
@@ -157,18 +264,20 @@ class Controller
     cells_at_distance & cells_of_contention
   end
 
+  # @return Set<Point>
+  def cells_next_to_my_organs(root_id: nil)
+    Entity.my_organs.keys.each_with_object(Set.new) do |my_organ_coords, mem|
+      mem.merge(arena.cells_at_distance(my_organ_coords, 1..1))
+    end - Entity.organs.keys
+  end
+
   # Return candidates for backfilling, sorted descending by most neighbors and closeness to root
   #
   # @return Array<Point>
   def cells_for_my_expansion
-    cells = Set.new
-
-    Entity.my_organs.keys.each do |my_organ_coords|
-      cells += arena.cells_at_distance(my_organ_coords, 1..1)
+    (cells_next_to_my_organs - Entity.sources.keys).sort_by do |cell|
+      [-my_neighboring_organ_count(cell), arena.dijkstra_shortest_path(cell, my_roots.first.first).size]
     end
-
-    (cells - Entity.organs.keys)
-      .sort_by { |cell| [-my_neighboring_organ_count(cell), arena.dijkstra_shortest_path(cell, my_roots.first.first).size] }
   end
 
   # @return Integer
@@ -190,7 +299,7 @@ class Controller
     cells
   end
 
-  def expand_towards_middle
+  def expand_towards_middle(coords, root)
     opp_root_coords = Point[opp_roots.first.first.x, opp_roots.first.first.y]
     path = arena.dijkstra_shortest_path(my_roots.first.first, opp_root_coords)
     midpoint = (path.size / 2.0).ceil
@@ -201,21 +310,30 @@ class Controller
       return
     end
 
-    @actions << "GROW #{my_latest_organ.last[:id]} #{mid_cell.x} #{mid_cell.y} BASIC"
+    @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{mid_cell.x} #{mid_cell.y} BASIC"
   end
 
-  def my_latest_organ
-    my_organs.sort_by { |k, v| -v[:id] }.first
+  def my_latest_organ(root_id:)
+    my_organs.select { |k, v| v[:root_id] == root_id }.sort_by { |k, v| -v[:id] }.first
   end
 
   # @param from Array # [coords, root]
   # @return [Array[coords, source], nil]
-  def path_to_closest_A(from:)
-    a_sources = Entity.sources.select { |coords, source| source[:type] == "A" }
+  def paths_to_sources(from:, source_type: "A")
+    sources = Entity.sources.select { |coords, source| source[:type] == source_type }
 
-    paths_to_sources = a_sources
+    sources
       .map { |coords, source| arena.dijkstra_shortest_path(from.first, coords) }
-      .sort_by { arena.path_length(_1) }[0..-2] # dropping very last option as too far in mirror cases
+      .sort_by { arena.path_length(_1) }
+  end
+
+  # @param from Array # [coords, root]
+  # @return [Array<Point>, nil]
+  def path_to_closest_A(from:)
+    paths_to_sources = paths_to_sources(from: from, source_type: "A")
+
+    # dropping very last option as too far in mirror cases
+    paths_to_sources = paths_to_sources[0..-2] if paths_to_sources.size > 1
 
     organs_in_cluster = my_organs.select { |coords, organ| organ[:root_id] == from.last[:id] }
 
@@ -230,14 +348,26 @@ class Controller
     paths_from_source_to_organs.sort_by { arena.path_length(_1) }.first&.reverse
   end
 
+  def can_afford_new_colony?
+    colony_cost = {a: 1, b: 2, c: 2, d: 3}
+    can_afford?(**colony_cost)
+  end
+
+  def can_afford?(a: 0, b: 0, c: 0, d: 0)
+    my_stock[:a] >= a &&
+      my_stock[:b] >= b &&
+      my_stock[:c] >= c &&
+      my_stock[:d] >= d
+  end
+
   # It's very likely that the outer cells of the arena will always be walls.
   def initialize_arena
     return if defined?(@arena)
 
     @arena = Grid.new
 
-    (1..(width - 1)).each do |x|
-      (1..(height - 1)).each do |y|
+    (0..(width - 1)).each do |x|
+      (0..(height - 1)).each do |y|
         @arena.add_cell(Point[x, y])
       end
     end
@@ -247,6 +377,13 @@ class Controller
       next unless entity[:type] == WALL
 
       @arena.remove_cell(coords)
+    end
+
+    # Remove any cells out of bounds
+    @arena.nodes.each do |node|
+      if node.x.negative? || node.y.negative? || node.x > (width - 1) || node.y > (height - 1)
+        @arena.remove_cell(node)
+      end
     end
 
     nil

@@ -15,6 +15,18 @@ RSpec.describe Grid, instance_name: :grid do
     g
   end
 
+  describe "#dup" do
+    subject(:dup) { grid.dup }
+
+    it "returns an instance with data completely separate from original's" do
+      expect(dup).to be_a(described_class)
+
+      expect{ grid.remove_cell(Point[0, 0]) }.to(
+        not_change{ dup[Point[0, 0]] }
+      )
+    end
+  end
+
   describe "#dijkstra_shortest_path(root, destination)" do
     subject(:dijkstra_shortest_path) { grid.dijkstra_shortest_path(root, destination) }
 
