@@ -64,6 +64,7 @@ class Controller
         grow_defensive_tentacle(coords, root) if actions.size < i.next && i.zero? # only furthest grows tentacles
         expand_towards_middle(coords, root) unless actions.size >= i.next
         grow_in_closest_empty_cell(coords, root) unless actions.size >= i.next
+        wait unless actions.size >= i.next
       end
     end
 
@@ -239,6 +240,10 @@ class Controller
       .sort_by { |coords, entity| entity[:id] }.first
 
     @actions << "GROW #{lowest_id_neighbor.last[:id]} #{growth_cell.x} #{growth_cell.y} #{BASIC}"
+  end
+
+  def wait
+    @actions << "WAIT"
   end
 
   def closest_path_to_my_organs(from:)
