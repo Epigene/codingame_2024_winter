@@ -67,6 +67,7 @@ class Grid
   def remove_cell(cell)
     structure[cell].each do |other_cell|
       structure[other_cell] -= [cell]
+      structure.delete(other_cell) if structure[other_cell].none?
     end
 
     structure.delete(cell)

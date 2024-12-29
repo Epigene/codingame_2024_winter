@@ -1,9 +1,10 @@
 # frozen_string_literal: true
 
-require "requires"
+require "init"
 require "point"
-# require "segment"
+require "segment"
 # require "graph"
 require "grid"
 require "weighted_graph"
+require "entity"
 require "controller"
