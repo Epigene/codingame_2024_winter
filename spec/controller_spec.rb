@@ -346,6 +346,51 @@ RSpec.describe Controller, instance_name: :controller do
         end
       end
     end
+
+    context "when it's a narrow-path bronze arena with A only accessible by destroying B" do
+      let(:width_and_height) { {width: 4, height: 4} }
+
+      context "when spawning next to A and needing to loop" do
+        let(:options) do
+          {
+            entities: {
+              Point[1, 1] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+              Point[0, 0] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[0, 1] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[0, 2] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[3, 3] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+              **wall_line([1, 0], [1, 0]),
+            },
+            my_stock: {:a=>5, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>5, :b=>0, :c=>1, :d=>1}, required_actions: 2
+          }
+        end
+
+        it "returns a command to loop south to be able to build harvester next turn" do
+          is_expected.to eq(["GROW 1 1 2 BASIC"])
+        end
+      end
+
+      context "when looped south" do
+        let(:options) do
+          {
+            entities: {
+              Point[1, 1] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+              Point[1, 2] => {:type=>"BASIC", :owner=>1, :id=>3, :dir=>"N", :parent_id=>1, :root_id=>1},
+              Point[0, 0] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[0, 1] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[0, 2] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+              Point[3, 3] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+              **wall_line([1, 0], [1, 0]),
+            },
+            my_stock: {:a=>5, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>5, :b=>0, :c=>1, :d=>1}, required_actions: 2
+          }
+        end
+
+        it "returns a command to build a harvester on top of B source to get to A" do
+          is_expected.to eq(["GROW 3 0 2 HARVESTER N"])
+        end
+      end
+    end
   end
 
   # @return Hash

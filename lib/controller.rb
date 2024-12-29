@@ -131,18 +131,22 @@ class Controller
     else # spawned next to A looks like
       debug("Looks like spawned next to A source, looping")
       harvester_locations = arena.cells_at_distance(path.last, 1..1) - Entity.all.keys
+
+      if harvester_locations.none?
+        debug("No place for harvester but on top of other protein source, oh, well..")
+        harvester_locations = arena.cells_at_distance(path.last, 1..1) - Entity.organs.keys
+      end
+
       clean_arena = arena_without_source_cells
 
-      paths = harvester_locations.map { clean_arena.dijkstra_shortest_path(path.first, _1) }
-        .sort_by { _1.size }
+      paths = harvester_locations.filter_map { clean_arena.dijkstra_shortest_path(path.first, _1) }.reject { _1.include?(path.last) }
 
       if paths.none?
         debug("No paths to nearby A without stepping on other protein sources :/")
-        paths = harvester_locations.map { arena.dijkstra_shortest_path(path.first, _1) }
-          .sort_by { _1.size }
+        paths = harvester_locations.filter_map { arena.dijkstra_shortest_path(path.first, _1) }.reject { _1.include?(path.last) }
       end
 
-      shortest_path = paths.first
+      shortest_path = paths.sort_by { _1.size }.first
 
       if paths.first.size < 4
         @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{shortest_path[1].x} #{shortest_path[1].y} #{BASIC}"
