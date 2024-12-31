@@ -60,8 +60,8 @@ class Controller
     @time_taken = 0
     time = Benchmark.realtime do
       # debug_stocks
-      # debug_entities
-      # debug_walls
+      debug_entities
+      debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
         connect_to_a(coords, root) if i.zero?
@@ -103,7 +103,7 @@ class Controller
 
       new_root_cell =
         (places_for_new_root & cells_on_same_row_or_column_as_i_can_reach).sort_by do |cell|
-          arena.dijkstra_shortest_path(cell, coords).size
+          arena.shortest_path(cell, coords).size
         end.last
 
       if new_root_cell.nil?
@@ -115,7 +115,7 @@ class Controller
 
       raise("D'oh, can't seem to be able to spore to protein source right away.") if cell_to_grow_spore.nil?
 
-      parent_cell = (arena.cells_at_distance(cell_to_grow_spore, 1..1) & Entity.my_organs.keys).first
+      parent_cell = (arena.neighbors(cell_to_grow_spore) & Entity.my_organs.keys).first
       direction = arena.direction(cell_to_grow_spore, new_root_cell)
 
       @actions << "GROW #{Entity.my_organs[parent_cell][:id]} #{cell_to_grow_spore.x} #{cell_to_grow_spore.y} #{SPORER} #{direction}"
@@ -126,13 +126,13 @@ class Controller
     elsif path.size > 3
       debug("Close source of A detected at #{path.last}, growing towards it")
       @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-3].x} #{path[-3].y} BASIC"
+    elsif path.size == 3
+      debug("Close source of A detected at #{path.last}, setting up a harvester")
+      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-2].x} #{path[-2].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
     elsif (cells = cells_for_harvester(root, source_type: "A")).one?
       debug("Source of A already next-door detected at #{path.last}, setting up a harvester")
       direction = arena.direction(cells.first, path.last)
       @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{cells.first.x} #{cells.first.y} #{HARVESTER} #{direction}"
-    elsif path.size == 3
-      debug("Close source of A detected at #{path.last}, setting up a harvester")
-      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-2].x} #{path[-2].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
     else # spawned next to A looks like
       debug("Looks like spawned next to A source, looping")
       harvester_locations = arena.cells_at_distance(path.last, 1..1) - Entity.all.keys
@@ -146,11 +146,11 @@ class Controller
 
       # clean_arena = arena_without_source_cells
 
-      paths = harvester_locations.filter_map { arena.dijkstra_shortest_path(coords, _1, excluding: Entity.sources.keys) }
+      paths = harvester_locations.filter_map { arena.shortest_path(coords, _1, excluding: Entity.sources.keys) }
 
       if paths.none?
         debug("No paths to nearby A without stepping on other protein sources :/")
-        paths = harvester_locations.filter_map { arena.dijkstra_shortest_path(coords, _1, excluding: [path.last]) }
+        paths = harvester_locations.filter_map { arena.shortest_path(coords, _1, excluding: [path.last]) }
       end
 
       debug("Paths to harvester locations are: #{paths}")
@@ -249,8 +249,8 @@ class Controller
     if spore_on_row = (Entity.my_sporers.keys & best_row).first # sporer on best row?
       target = (best_row.to_set & Entity.sources("A").flat_map { |k, v| arena.cells_at_distance(k, 2..2) }.reduce(&:merge))
         .sort_by do |t|
-          distance_from_mid = path_from_me_to_opp.mid.filter_map { arena.dijkstra_shortest_path(t, _1).size }.sort.first
-          distance_from_me = arena.dijkstra_shortest_path(t, my_roots.first.first).size
+          distance_from_mid = path_from_me_to_opp.mid.filter_map { arena.shortest_path(t, _1).size }.sort.first
+          distance_from_me = arena.shortest_path(t, my_roots.first.first).size
 
           [distance_from_mid, distance_from_me]
         end.first
@@ -321,13 +321,13 @@ class Controller
 
   def closest_path_to_my_organs(from:, excluding: nil)
     my_organs.keys.filter_map do |my_organ_coords|
-      arena.dijkstra_shortest_path(from, my_organ_coords, excluding: excluding)
+      arena.shortest_path(from, my_organ_coords, excluding: excluding)
     end.sort_by(&:size).first
   end
 
   def closest_path_to_opp_organs(from:)
     opp_organs.keys.filter_map do |opp_organ_coords|
-      arena.dijkstra_shortest_path(from, opp_organ_coords)
+      arena.shortest_path(from, opp_organ_coords)
     end.sort_by(&:size).first
   end
 
@@ -344,8 +344,14 @@ class Controller
 
   # @return Set<Point>
   def cells_next_to_my_organs(root_id: nil)
-    Entity.my_organs.keys.each_with_object(Set.new) do |my_organ_coords, mem|
-      mem.merge(arena.cells_at_distance(my_organ_coords, 1..1))
+    Entity.my_organs(root_id: root_id).keys.each_with_object(Set.new) do |my_organ_coords, mem|
+      mem.merge(arena.neighbors(my_organ_coords))
+    end - Entity.organs.keys
+  end
+
+  def cells_2_away_from_my_organs(root_id: nil)
+    Entity.my_organs(root_id: root_id).keys.each_with_object(Set.new) do |my_organ_coords, mem|
+      mem.merge(arena.cells_at_distance(my_organ_coords, 2..2))
     end - Entity.organs.keys
   end
 
@@ -354,7 +360,7 @@ class Controller
   # @return Array<Point>
   def cells_for_my_expansion
     (cells_next_to_my_organs - Entity.sources.keys).sort_by do |cell|
-      [-my_neighboring_organ_count(cell), arena.dijkstra_shortest_path(cell, my_roots.first.first).size]
+      [-my_neighboring_organ_count(cell), arena.shortest_path(cell, my_roots.first.first).size]
     end
   end
 
@@ -394,7 +400,7 @@ class Controller
     return @path_from_me_to_opp if defined?(@path_from_me_to_opp)
 
     opp_root_coords = Point[opp_roots.first.first.x, opp_roots.first.first.y]
-    path = arena.dijkstra_shortest_path(my_roots.first.first, opp_root_coords)
+    path = arena.shortest_path(my_roots.first.first, opp_root_coords)
 
     @path_from_me_to_opp = path
   end
@@ -409,25 +415,31 @@ class Controller
     sources = Entity.sources.select { |coords, source| source[:type] == source_type }
 
     sources
-      .map { |coords, source| arena.dijkstra_shortest_path(from.first, coords) }
+      .map { |coords, source| arena.shortest_path(from.first, coords) }
       .sort_by { arena.path_length(_1) }
   end
 
+  # Paradoxically, sources 2 away are better than ones next to organs
+  #
   # @param from Array # [coords, root]
   # @return [Array<Point>, nil]
   def path_to_closest_A(from:)
+    if harvestable_source = (cells_2_away_from_my_organs(root_id: from.last[:id]) & Entity.sources("A").keys).first
+      return closest_path_to_my_organs(from: harvestable_source).reverse
+    end
+
     paths_to_sources = paths_to_sources(from: from, source_type: "A")
 
     # dropping very last option as too far in mirror cases
     paths_to_sources = paths_to_sources[0..-2] if paths_to_sources.size > 1
 
-    organs_in_cluster = my_organs.select { |coords, organ| organ[:root_id] == from.last[:id] }
+    organs_in_cluster = Entity.my_organs(root_id: from.last[:id])
 
     paths_from_source_to_organs = []
 
     paths_to_sources.map do |path|
       organs_in_cluster.map do |coords, organ|
-        paths_from_source_to_organs << arena.dijkstra_shortest_path(path.last, coords)
+        paths_from_source_to_organs << arena.shortest_path(path.last, coords)
       end
     end
 
@@ -478,7 +490,7 @@ class Controller
   def initialize_cells_of_contention
     return if defined?(@cells_of_contention)
 
-    path = arena.dijkstra_shortest_path(my_roots.first.first, opp_roots.first.first)
+    path = arena.shortest_path(my_roots.first.first, opp_roots.first.first)
 
     midpoint_low = (arena.path_length(path) / 2.0).floor
     midpoint_high = (arena.path_length(path) / 2.0).ceil

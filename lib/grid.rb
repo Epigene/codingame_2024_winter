@@ -273,6 +273,10 @@ class Grid
     segments
   end
 
+  def neighbors(point)
+    cells_at_distance(point, 1..1)
+  end
+
   # Returns cells that are specified distance away from a given cell. Useful for telling
   # which cells are covered by a bombard attack 2-3 cells away etc.
   #
