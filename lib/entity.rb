@@ -11,6 +11,10 @@ class Entity
   WALL = "WALL"
   ORGAN_DIRECTIONS = %w[N E S W X].freeze
 
+  def self.[](node)
+    all[node]
+  end
+
   def self.all=(entities)
     @all = entities
   end
@@ -23,8 +27,9 @@ class Entity
     all.select { |coords, entity| entity[:type] == WALL }
   end
 
-  def self.sources
-    all.select { |coords, entity| SOURCES.include?(entity[:type]) }
+  def self.sources(types = SOURCES)
+    types = Array.wrap(types)
+    all.select { |coords, entity| types.include?(entity[:type]) }
   end
 
   # Differs from .sources in that sources already harvested by me are omitted
@@ -38,8 +43,16 @@ class Entity
     all.select { |coords, entity| entity[:owner] >= 0 }
   end
 
-  def self.my_organs
-    all.select { |coords, entity| entity[:owner] == 1 }
+  # @return Hash
+  def self.my_organs(root_id: nil)
+    all.select do |coords, entity|
+      entity[:owner] == 1 &&
+        if root_id
+          entity[:root_id] == root_id
+        else
+          true
+        end
+    end
   end
 
   def self.my_roots
@@ -48,6 +61,11 @@ class Entity
 
   def self.my_harvesters
     my_organs.select { |coords, entity| entity[:type] == HARVESTER }.sort_by { |_, root| root[:id ]}
+  end
+
+  # @return Hash
+  def self.my_sporers
+    my_organs.select { |coords, entity| entity[:type] == SPORER }.sort_by { |_, root| root[:id ]}.to_h
   end
 
   #== instance methods ==

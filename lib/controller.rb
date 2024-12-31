@@ -17,7 +17,7 @@ class Controller
     ROOT=> {a: 1, b: 1, c: 1, d: 1},
   }
 
-  attr_reader :width, :height
+  attr_reader :width, :height, :turn
   attr_reader :entities, :my_stock, :opp_stock, :required_actions
 
   attr_reader :arena # Grid object
@@ -30,6 +30,7 @@ class Controller
   def initialize(width:, height:)
     @width = width
     @height = height
+    @turn = 0
   end
 
   # @param entities Hash
@@ -43,8 +44,10 @@ class Controller
     @entities = Entity.all
     @my_stock = my_stock
     @opp_stock = opp_stock
-    @required_actions = required_actions; debug "Required actions: #{required_actions}"
+    @required_actions = required_actions # ; debug "Required actions: #{required_actions}"
     initialize_arena
+    promising_rows # this may be left for lazyload, but early probably better
+    @turn += 1
 
     @my_organs = entities.select { |coords, entity| entity[:owner] == 1 }
     @my_roots = Entity.my_roots # my_organs.select { |coords, entity| entity[:type] == ROOT }
@@ -56,13 +59,14 @@ class Controller
 
     @time_taken = 0
     time = Benchmark.realtime do
-      debug_stocks
-      debug_entities
+      # debug_stocks
+      # debug_entities
       # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
         connect_to_a(coords, root) if i.zero?
         grow_defensive_tentacle(coords, root) if actions.size < i.next && i.zero? # only furthest grows tentacles
+        spore_and_colonize(coords, root) if actions.size < i.next && i.zero? && can_afford_new_colony?
         expand_towards_middle(coords, root) unless actions.size >= i.next
         grow_in_closest_empty_cell(coords, root) unless actions.size >= i.next
         wait unless actions.size >= i.next
@@ -140,9 +144,9 @@ class Controller
 
       debug("Harvester locations are: #{harvester_locations}")
 
-      clean_arena = arena_without_source_cells
+      # clean_arena = arena_without_source_cells
 
-      paths = harvester_locations.filter_map { clean_arena.dijkstra_shortest_path(coords, _1) }
+      paths = harvester_locations.filter_map { arena.dijkstra_shortest_path(coords, _1, excluding: Entity.sources.keys) }
 
       if paths.none?
         debug("No paths to nearby A without stepping on other protein sources :/")
@@ -174,9 +178,9 @@ class Controller
   end
 
   # A sparser arena where cells with organs or protein sources are forbidden for pathfinding
-  def arena_without_source_cells
-    arena.dup.tap { _1.remove_cells(Entity.sources.keys) }
-  end
+  # def arena_without_source_cells
+  #   arena.dup.tap { _1.remove_cells(Entity.sources.keys) }
+  # end
 
   # Useful for determining where to put a sporer for a new colony
   #
@@ -206,10 +210,11 @@ class Controller
 
       if best_candidates.any?
         candidate = best_candidates.first
+        parent = Entity[(arena.cells_at_distance(candidate, 1..1) & Entity.my_organs(root_id: root[:id]).keys).first]
         path_to_opp = closest_path_to_opp_organs(from: candidate)
         direction = arena.direction(*path_to_opp.first(2))
 
-        @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{candidate.x} #{candidate.y} #{TENTACLE} #{direction}"
+        @actions << "GROW #{parent[:id]} #{candidate.x} #{candidate.y} #{TENTACLE} #{direction}"
       else
         debug("D'oh, somehow all battle cells are more controlled by opp than us, how?")
       end
@@ -234,6 +239,69 @@ class Controller
     end
   end
 
+  def spore_and_colonize(coords, root)
+    return if promising_rows.none?
+
+    best_row = promising_rows.sort_by { -(_1 & path_from_me_to_opp).size }.first
+
+    return if best_row.nil?
+
+    if spore_on_row = (Entity.my_sporers.keys & best_row).first # sporer on best row?
+      target = (best_row.to_set & Entity.sources("A").flat_map { |k, v| arena.cells_at_distance(k, 2..2) }.reduce(&:merge))
+        .sort_by do |t|
+          distance_from_mid = path_from_me_to_opp.mid.filter_map { arena.dijkstra_shortest_path(t, _1).size }.sort.first
+          distance_from_me = arena.dijkstra_shortest_path(t, my_roots.first.first).size
+
+          [distance_from_mid, distance_from_me]
+        end.first
+
+      if target.nil?
+        debug("Have sporer on longest row, but no good spots to spore?")
+        return
+      end
+
+      @actions << "SPORE #{Entity[spore_on_row][:id]} #{target.x} #{target.y}"
+      return
+    end
+
+    closest_open_cell_on_row = (best_row - Entity.sources("A").keys)
+      .sort_by { closest_path_to_my_organs(from: _1).size }.first
+
+    return if closest_open_cell_on_row.nil?
+
+    path = closest_path_to_my_organs(from: closest_open_cell_on_row, excluding: Entity.sources("A").keys).reverse
+
+    if path.size >= 3
+      @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} #{BASIC}"
+    elsif path.size == 2 # yay, nearby
+      # facing the direction where there are more cells of this best row
+      direction =
+        if best_row.index(closest_open_cell_on_row) <= (best_row.size / 2)
+          "E"
+        else
+          "W"
+        end
+
+      @actions << "GROW #{Entity[path.first][:id]} #{path.last.x} #{path.last.y} #{SPORER} #{direction}"
+    end
+  end
+
+  # looking at two longest rows only because it can be a diagonal mirror
+  #
+  # @return Array<Array>
+  def promising_rows
+    return @promising_rows if defined?(@promising_rows)
+
+    row_segments = arena.row_segments.values.flat_map { _1 }.sort_by { -_1.size }.first(2)
+
+    @promising_rows =
+      if row_segments.first.size >= 4
+        row_segments
+      else
+        []
+      end
+  end
+
   # Backfilling action. Once we've established teritorrial dominance, just grow in backyard.
   def grow_in_closest_empty_cell(coords, root)
     growth_cell = cells_for_my_expansion.first
@@ -251,9 +319,9 @@ class Controller
     @actions << "WAIT"
   end
 
-  def closest_path_to_my_organs(from:)
+  def closest_path_to_my_organs(from:, excluding: nil)
     my_organs.keys.filter_map do |my_organ_coords|
-      arena.dijkstra_shortest_path(from, my_organ_coords)
+      arena.dijkstra_shortest_path(from, my_organ_coords, excluding: excluding)
     end.sort_by(&:size).first
   end
 
@@ -310,8 +378,7 @@ class Controller
   end
 
   def expand_towards_middle(coords, root)
-    opp_root_coords = Point[opp_roots.first.first.x, opp_roots.first.first.y]
-    path = arena.dijkstra_shortest_path(my_roots.first.first, opp_root_coords)
+    path = path_from_me_to_opp
     midpoint = (path.size / 2.0).ceil
     mid_cell = path[midpoint]
 
@@ -321,6 +388,15 @@ class Controller
     end
 
     @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{mid_cell.x} #{mid_cell.y} BASIC"
+  end
+
+  def path_from_me_to_opp
+    return @path_from_me_to_opp if defined?(@path_from_me_to_opp)
+
+    opp_root_coords = Point[opp_roots.first.first.x, opp_roots.first.first.y]
+    path = arena.dijkstra_shortest_path(my_roots.first.first, opp_root_coords)
+
+    @path_from_me_to_opp = path
   end
 
   def my_latest_organ(root_id:)
@@ -419,7 +495,8 @@ class Controller
 
   def debug_entities
     debug "Entities:"
-    @entities.each_pair do |coords, entity|
+    # @entities.to_a.last(25).each do |coords, entity|
+    @entities.each do |coords, entity|
       debug("#{coords} => #{entity},") if entity[:type] != WALL
     end
   end

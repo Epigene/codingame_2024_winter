@@ -2,7 +2,7 @@ debug "Game starts!"
 # game loop
 loop do
   entity_count = gets.to_i
-  debug("There's #{entity_count} entities:")
+  # debug("There's #{entity_count} entities:")
 
   entities = {}
 

@@ -102,6 +102,8 @@ class Grid
   #
   # @return [Array, nil] # will return an array of nodes from root to destination, or nil if no path exists
   def dijkstra_shortest_path(root, destination, excluding: nil)
+    return [root] if root == destination
+
     # When we choose the arbitrary starting parent node we mark it as visited by changing its state in the 'visited' structure.
     visited = [root, *excluding].to_set
 
@@ -120,7 +122,13 @@ class Grid
         # raise("Queue is empty, but destination not reached!")
       end
 
-      neighboring_nodes = structure[dequeued_node].sort_by { -structure[_1].size }
+      neighboring_nodes =
+        begin
+          structure[dequeued_node].sort_by { -structure[_1].size }
+        rescue => _e
+          debug("Node #{dequeued_node} has a weird structure: #{structure[dequeued_node]}")
+          raise
+        end
       # debug "neighboring_nodes for #{ dequeued_node }: '#{ neighboring_nodes }'"
 
       neighboring_nodes.each do |node|
@@ -152,12 +160,117 @@ class Grid
     end
   end
 
+  def shortest_path(start, goal, excluding: nil)
+    return [start] if start == goal
+
+    # Initialize forward and backward search queues
+    forward_queue = [start]
+    backward_queue = [goal]
+
+    # Sets to track visited nodes for both directions
+    exclusions = excluding.to_a.each_with_object({}) do |node, mem|
+      mem[node] = nil
+    end
+
+    forward_visited = {start => nil}.merge(exclusions) # Maps node to its parent
+    backward_visited = {goal => nil}.merge(exclusions)
+
+    loop do
+      # Expand the forward search
+      if forward_queue.any?
+        intersect = expand_layer(forward_queue, forward_visited, backward_visited, structure)
+        return build_path(intersect, forward_visited, backward_visited) if intersect
+      end
+
+      # Expand the backward search
+      if backward_queue.any?
+        intersect = expand_layer(backward_queue, backward_visited, forward_visited, structure)
+        return build_path(intersect, forward_visited, backward_visited) if intersect
+      end
+
+      # If neither queue can proceed, no path exists
+      return if forward_queue.empty? && backward_queue.empty?
+    end
+
+    nil # No path found
+  end
+
+  def expand_layer(queue, visited, other_visited, structure)
+    current_node = queue.shift
+
+    structure[current_node].sort_by { |neighbor| -structure[neighbor].size }.each do |neighbor|
+      next if visited.key?(neighbor)
+
+      visited[neighbor] = current_node
+      return neighbor if other_visited.key?(neighbor) # Intersection found
+
+      queue << neighbor
+    end
+
+    nil
+  end
+
+  def build_path(intersect, forward_visited, backward_visited)
+    path = []
+
+    # Build path from start to intersection
+    current = intersect
+    while current
+      path.unshift(current)
+      current = forward_visited[current]
+    end
+
+    # Build path from intersection to goal
+    current = backward_visited[intersect]
+    while current
+      path << current
+      current = backward_visited[current]
+    end
+
+    path
+  end
+
   # Feed in for example shortest path found to get its distance. Useful when comparing routes
   #
   # @param path [Array<cell>]
   # @return Integer
   def path_length(path)
     path.size - 1
+  end
+
+  # Useful for finding longest rows in a grid
+  #
+  # @return Hash # { y => [[P[0, 0], P[1, 0], P[2, 0]]] } each row lists its segment x-es
+  def row_segments
+    rows = Hash.new { |hash, key| hash[key] = [] }
+    nodes.each do |node|
+      rows[node.y] << node.x
+    end
+
+    segments = {}
+
+    rows.each do |y, x_coords|
+      x_coords.sort! # Sort x-coordinates in the row
+      row_segments = []
+
+      current_segment = [Point[x_coords.first, y]]
+
+      x_coords.each_cons(2) do |a, b|
+        if b == a.next
+          current_segment << Point[b, y]
+        else # break in contiguity
+          row_segments << current_segment
+
+          current_segment = [Point[b, y]]
+        end
+      end
+
+      # Add the last segment
+      row_segments << current_segment
+      segments[y] = row_segments
+    end
+
+    segments
   end
 
   # Returns cells that are specified distance away from a given cell. Useful for telling
