@@ -271,8 +271,13 @@ class Controller
 
     return if best_row.nil?
 
-    if spore_on_row = (Entity.my_sporers.keys & best_row).first # sporer on best row?
-      target = (best_row.to_set & Entity.sources("A").flat_map { |k, v| arena.cells_at_distance(k, 2..2) }.reduce(&:merge))
+    if spore_on_row = (Entity.my_sporers.select { |k, v| %w[W E].include?(v[:dir]) }.to_h.keys & best_row).first # sporer on best row?
+      target = (
+        (
+          best_row.to_set &
+          Entity.sources("A").flat_map { |k, v| arena.cells_at_distance(k, 2..2) }.reduce(&:merge)
+        ) - Entity.organs.keys
+      )
         .sort_by do |t|
           distance_from_mid = path_from_me_to_opp.mid.filter_map { arena.shortest_path(t, _1).size }.sort.first
           distance_from_me = arena.shortest_path(t, my_roots.first.first).size
@@ -281,7 +286,18 @@ class Controller
         end.first
 
       if target.nil?
-        debug("Have sporer on longest row, but no good spots to spore?")
+        debug("Have sporer on longest row, but no good spots to spore. Sporing far.")
+
+        target =
+          if best_row.index(spore_on_row) <= (best_row.size / 2)
+            best_row.last
+          else
+            best_row.first
+          end
+      end
+
+      if Entity[target] && Entity.organs[target]
+        debug("Oops, there's an organ at sporing target, skipping sporing..")
         return
       end
 

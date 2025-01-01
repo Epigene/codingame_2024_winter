@@ -1115,6 +1115,57 @@ RSpec.describe Controller, instance_name: :controller do
         end
       end
     end
+
+    context "when it's seed=2069248108547179800, a 16x8 arena with good 8-wide rows" do
+      let(:width_and_height) { {width: 16, height: 8} }
+
+      let(:options) do
+        {
+          entities: {
+            P[1, 0] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[2, 0] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[3, 0] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[5, 0] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[11, 0] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[14, 0] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[15, 0] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[1, 1] => {:type=>"HARVESTER", :owner=>1, :id=>5, :dir=>"N", :parent_id=>3, :root_id=>1},
+            P[14, 1] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 2] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            P[1, 2] => {:type=>"BASIC", :owner=>1, :id=>3, :dir=>"N", :parent_id=>1, :root_id=>1},
+            P[2, 2] => {:type=>"SPORER", :owner=>1, :id=>7, :dir=>"E", :parent_id=>3, :root_id=>1},
+            P[11, 2] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[15, 2] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[2, 3] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[6, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[15, 3] => {:type=>"BASIC", :owner=>0, :id=>8, :dir=>"N", :parent_id=>4, :root_id=>2},
+            P[9, 4] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 4] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[15, 4] => {:type=>"BASIC", :owner=>0, :id=>4, :dir=>"N", :parent_id=>2, :root_id=>2},
+            P[0, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 5] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[14, 5] => {:type=>"BASIC", :owner=>0, :id=>6, :dir=>"W", :parent_id=>2, :root_id=>2},
+            P[15, 5] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            P[1, 6] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 7] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[1, 7] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 7] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[10, 7] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[12, 7] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 7] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[14, 7] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            **walls([P[8, 0], P[13, 0], P[0, 1], P[5, 1], P[6, 1], P[9, 1], P[8, 2], P[4, 3], P[13, 3], P[14, 3], P[1, 4], P[2, 4], P[11, 4], P[7, 5], P[6, 6], P[9, 6], P[10, 6], P[15, 6], P[2, 7], P[7, 7]])
+          },
+          my_stock: {:a=>8, :b=>8, :c=>9, :d=>4}, opp_stock: {:a=>8, :b=>8, :c=>9, :d=>4}, required_actions: 1
+        }
+      end
+
+      it "returns a command to spore far along the sporer row since there's no good A source nearby" do
+        is_expected.to eq(["SPORE 7 7 2"])
+      end
+    end
   end
 
   # @return Hash
