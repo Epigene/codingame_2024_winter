@@ -115,7 +115,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns actions to spread to the south not to destroy the A source" do
-          is_expected.to eq(["GROW 6 16 5 BASIC"])
+          is_expected.to eq(["GROW 6 5 3 BASIC"]) # and never "GROW X 6 2"
         end
       end
 
@@ -402,7 +402,7 @@ RSpec.describe Controller, instance_name: :controller do
         it "returns a command to grow harvester" do
           is_expected.to eq(
             [
-              "GROW 3 16 5 BASIC",
+              "GROW 1 2 2 BASIC",
               "GROW 5 15 2 HARVESTER N",
             ]
           )
@@ -581,7 +581,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns a command to grow towards good spot for a sporer" do
-          is_expected.to eq(["GROW 3 1 1 BASIC"])
+          is_expected.to eq(["GROW 1 1 0 BASIC"])
         end
       end
 
@@ -883,7 +883,6 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "returns a command to grow a sporer facing West" do
-        # is_expected.to eq(["GROW 99 13 8 SPORER W"])
         is_expected.to eq(["GROW 4 17 5 BASIC"])
       end
     end
@@ -922,7 +921,7 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "after placing harvester returns a command to place another harvester since opportune" do
-        is_expected.to eq(["GROW 9 15 1 BASIC", "GROW 5 3 6 HARVESTER E"])
+        is_expected.to eq(["GROW 9 5 1 BASIC", "GROW 5 3 6 HARVESTER E"])
       end
 
       context "when grown a bit and contacting opp" do
@@ -986,8 +985,49 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns commands to just grow and not fight" do
-          is_expected.to eq(["GROW 19 7 6 BASIC", "GROW 19 7 6 BASIC"])
+          is_expected.to eq(["GROW 19 7 6 BASIC", "GROW 19 6 7 BASIC"])
         end
+      end
+    end
+
+    context "when a real 24x12 map with labyrinthine walls and closest path blocked by A sources" do
+      let(:width_and_height) { {width: 24, height: 12} }
+
+      let(:options) do
+        {
+          entities: {
+            P[3, 0] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[20, 0] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[3, 2] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            P[20, 2] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            P[1, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[3, 3] => {:type=>"BASIC", :owner=>1, :id=>3, :dir=>"N", :parent_id=>1, :root_id=>1},
+            P[4, 3] => {:type=>"BASIC", :owner=>1, :id=>4, :dir=>"N", :parent_id=>3, :root_id=>1},
+            P[22, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 4] => {:type=>"BASIC", :owner=>1, :id=>5, :dir=>"N", :parent_id=>4, :root_id=>1},
+            P[4, 5] => {:type=>"HARVESTER", :owner=>1, :id=>6, :dir=>"E", :parent_id=>5, :root_id=>1},
+            P[5, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[7, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[10, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[16, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[18, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[1, 6] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[5, 6] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[18, 6] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[22, 6] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[9, 7] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[14, 7] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[1, 9] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[22, 9] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            **walls([P[0, 0], P[1, 0], P[5, 0], P[6, 0], P[7, 0], P[9, 0], P[11, 0], P[12, 0], P[14, 0], P[16, 0], P[17, 0], P[18, 0], P[22, 0], P[23, 0], P[2, 1], P[4, 1], P[5, 1], P[6, 1], P[7, 1], P[16, 1], P[17, 1], P[18, 1], P[19, 1], P[21, 1], P[2, 2], P[4, 2], P[5, 2], P[6, 2], P[7, 2], P[9, 2], P[14, 2], P[16, 2], P[17, 2], P[18, 2], P[19, 2], P[21, 2], P[0, 3], P[2, 3], P[5, 3], P[10, 3], P[13, 3], P[18, 3], P[21, 3], P[23, 3], P[5, 4], P[10, 4], P[11, 4], P[12, 4], P[13, 4], P[18, 4], P[0, 5], P[2, 5], P[3, 5], P[8, 5], P[15, 5], P[20, 5], P[21, 5], P[23, 5], P[2, 6], P[3, 6], P[4, 6], P[6, 6], P[7, 6], P[8, 6], P[10, 6], P[11, 6], P[12, 6], P[13, 6], P[15, 6], P[16, 6], P[17, 6], P[19, 6], P[20, 6], P[21, 6], P[2, 7], P[3, 7], P[6, 7], P[17, 7], P[20, 7], P[21, 7], P[4, 8], P[5, 8], P[6, 8], P[7, 8], P[10, 8], P[11, 8], P[12, 8], P[13, 8], P[16, 8], P[17, 8], P[18, 8], P[19, 8], P[0, 9], P[23, 9], P[0, 10], P[1, 10], P[22, 10], P[23, 10], P[4, 11], P[5, 11], P[6, 11], P[7, 11], P[8, 11], P[9, 11], P[10, 11], P[13, 11], P[14, 11], P[15, 11], P[16, 11], P[17, 11], P[18, 11], P[19, 11]])
+          },
+          my_stock: {:a=>5, :b=>3, :c=>8, :d=>9}, opp_stock: {:a=>5, :b=>3, :c=>8, :d=>9}, required_actions: 1
+        }
+      end
+
+      it "returns a command to grow towards opponent via route that does not contain A's (via [1, 8])" do
+        is_expected.to eq(["GROW 3 3 4 BASIC"])
       end
     end
   end
@@ -1012,6 +1052,14 @@ RSpec.describe Controller, instance_name: :controller do
       west_wall = wall_line([0, 1], [0, height - 1]),
       east_wall = wall_line([width-1, 1], [width-1, height-1])
     ].reduce(&:merge)
+  end
+
+  # Since wall hash is always the same, expanding it from jut points debugged from real arenas
+  # @return Hash
+  def walls(points)
+    points.each_with_object({}) do |point, mem|
+      mem[point] = wall_hash
+    end
   end
 
   def wall_hash

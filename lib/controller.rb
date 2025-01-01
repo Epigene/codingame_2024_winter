@@ -58,7 +58,7 @@ class Controller
     @time_taken = 0
     time = Benchmark.realtime do
       # debug_stocks
-      debug_entities
+      # debug_entities
       # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
@@ -72,9 +72,23 @@ class Controller
     end
 
     debug("Took #{(time * 1000).round}ms to execute", 3)
+    raise("Took too long!") if (time * 1000).round > 50 # 50ms per turn, very thight
 
     actions.reverse
   end
+
+  # require "stackprof"
+  # require "json"
+  # def call(**options)
+  #   profile =
+  #     StackProf.run(ignore_gc: true, interval: 1000, mode: :wall, raw: true) do
+  #       @value = orig_call(**options)
+  #     end
+
+  #   output_file = "#{File.dirname(__FILE__)}/../log/stackprof.json"
+  #   File.write(output_file, JSON.generate(profile))
+  #   @value
+  # end
 
   private
 
@@ -267,26 +281,47 @@ class Controller
       return
     end
 
-    closest_open_cell_on_row = (best_row - Entity.sources("A").keys)
-      .sort_by { closest_path_to_my_organs(from: _1).size }.first
+    # Looking for exactly shortest path is very expensive (organs * cells on best row),
+    # so instead growing randomly and building spore on row is happen to reach it.
+    # closest_path_to_open_cell_on_row = (best_row - Entity.sources("A").keys)
+    #   .map { closest_path_to_my_organs(from: _1, excluding: Entity.sources("A").keys) }
+    #   .sort_by { _1.size }.first
 
-    return if closest_open_cell_on_row.nil?
+    # return if closest_path_to_open_cell_on_row.nil?
 
-    path = closest_path_to_my_organs(from: closest_open_cell_on_row, excluding: Entity.sources("A").keys).reverse
+    # path = closest_path_to_open_cell_on_row.reverse
 
-    if path.size >= 3
-      @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} #{BASIC}"
-    elsif path.size == 2 # yay, nearby
-      # facing the direction where there are more cells of this best row
-      direction =
-        if best_row.index(closest_open_cell_on_row) <= (best_row.size / 2)
-          "E"
-        else
-          "W"
-        end
+    # debug("Growing colony spores")
+    # if path.size >= 3
+    #   @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} #{BASIC}"
+    # elsif path.size == 2 # yay, nearby
+    #   # facing the direction where there are more cells of this best row
+    #   direction =
+    #     if best_row.index(closest_open_cell_on_row) <= (best_row.size / 2)
+    #       "E"
+    #     else
+    #       "W"
+    #     end
 
-      @actions << "GROW #{Entity[path.first][:id]} #{path.last.x} #{path.last.y} #{SPORER} #{direction}"
-    end
+    #   @actions << "GROW #{Entity[path.first][:id]} #{path.last.x} #{path.last.y} #{SPORER} #{direction}"
+    # end
+    #
+    open_cells_on_best_row = (best_row - Entity.sources("A").keys)
+    nearby_cell_on_row = (cells_next_to_my_organs(root_id: root[:id]) & open_cells_on_best_row).first
+    return if nearby_cell_on_row.nil?
+
+
+    parent = Entity[(arena.neighbors(nearby_cell_on_row) & Entity.my_organs(root_id: root[:id]).keys).first]
+
+    # facing the direction where there are more cells of this best row
+    direction =
+      if best_row.index(nearby_cell_on_row) <= (best_row.size / 2)
+        "E"
+      else
+        "W"
+      end
+
+    @actions << "GROW #{parent[:id]} #{nearby_cell_on_row.x} #{nearby_cell_on_row.y} #{SPORER} #{direction}"
   end
 
   # looking at two longest rows only because it can be a diagonal mirror
@@ -311,7 +346,6 @@ class Controller
     return unless growth_cell
 
     debug("Peacibly growing in the backyard")
-
     lowest_id_neighbor = Entity.my_organs.slice(*arena.cells_at_distance(growth_cell, 1..1))
       .sort_by { |coords, entity| entity[:id] }.first
 
@@ -398,14 +432,30 @@ class Controller
       return
     end
 
-    @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{mid_cell.x} #{mid_cell.y} BASIC"
+    midpoint.downto(1).each do |index|
+      next unless Entity.organs[path[index]].nil?
+
+      parent = Entity.my_organs[path[index - 1]]
+      next if parent.nil?
+
+      break unless parent[:root_id] == root[:root_id]
+
+      debug("Growing towards the middle")
+      @actions << "GROW #{parent[:id]} #{path[index].x} #{path[index].y} BASIC"
+      break
+    end
   end
 
   def path_from_me_to_opp
     return @path_from_me_to_opp if defined?(@path_from_me_to_opp)
 
     opp_root_coords = Point[opp_roots.first.first.x, opp_roots.first.first.y]
-    path = arena.shortest_path(my_roots.first.first, opp_root_coords)
+    path = arena.shortest_path(my_roots.first.first, opp_root_coords, excluding: Entity.sources("A").keys)
+
+    if path.nil?
+      debug("No path to opponent if we spare A sources, falling back to non-sparing path")
+      path = arena.shortest_path(my_roots.first.first, opp_root_coords)
+    end
 
     @path_from_me_to_opp = path
   end
@@ -517,17 +567,25 @@ class Controller
 
   def debug_entities
     debug "Entities:"
-    @entities.to_a.last(25).each do |coords, entity|
-    # @entities.each do |coords, entity|
+    # @entities.to_a.last(25).each do |coords, entity|
+    @entities.each do |coords, entity|
       debug("#{coords} => #{entity},") if entity[:type] != WALL
     end
   end
 
   def debug_walls
-    debug "Walls:"
-    @entities.each_pair do |coords, entity|
-      debug("#{coords} => #{entity},") if entity[:type] == WALL
+    return @debug_walls if defined?(@debug_walls)
+
+    debug "Walls IDs:"
+    wall_cells = []
+    @entities.each do |coords, entity|
+      # debug("#{coords} => #{entity},") if entity[:type] == WALL
+      wall_cells << coords if entity[:type] == WALL
     end
+
+    debug(wall_cells.to_s)
+
+    @debug_walls = true
   end
 
   def debug_stocks
