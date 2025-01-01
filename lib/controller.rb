@@ -149,7 +149,7 @@ class Controller
       direction = arena.direction(cells.first, path.last)
       @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{cells.first.x} #{cells.first.y} #{HARVESTER} #{direction}"
     else # spawned next to A looks like
-      debug("Looks like spawned next to A source, looping")
+      debug("Looks like spawned next to A source, comparing looping to other options..")
       harvester_locations = arena.cells_at_distance(path.last, 1..1) - Entity.all.keys
 
       if harvester_locations.none?
@@ -158,9 +158,6 @@ class Controller
       end
 
       debug("Harvester locations are: #{harvester_locations}")
-
-      # clean_arena = arena_without_source_cells
-
       paths = harvester_locations.filter_map { arena.shortest_path(coords, _1, excluding: Entity.sources.keys) }
 
       if paths.none?
@@ -171,6 +168,9 @@ class Controller
       debug("Paths to harvester locations are: #{paths}")
 
       shortest_path = paths.sort_by { _1.size }.first
+
+      path_to_other_source = path_to_closest_A(from: [coords, root], at_distance: 2..)
+      shortest_path = path_to_other_source if path_to_other_source && shortest_path.size > path_to_other_source.size
 
       @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{shortest_path[1].x} #{shortest_path[1].y} #{BASIC}"
     end
@@ -477,8 +477,9 @@ class Controller
   # Paradoxically, sources 2 away are better than ones next to organs
   #
   # @param from Array # [coords, root]
+  # @param at_distance Range
   # @return [Array<Point>, nil]
-  def path_to_closest_A(from:)
+  def path_to_closest_A(from:, at_distance: 1..)
     if harvestable_source = (cells_2_away_from_my_organs(root_id: from.last[:id]) & Entity.available_sources("A").keys).first
       path = closest_path_to_my_organs(from: harvestable_source).reverse
       if path.size == 2 # we have organs next to source already
@@ -497,9 +498,27 @@ class Controller
 
     paths_from_source_to_organs = []
 
-    paths_to_sources.map do |path|
-      organs_in_cluster.map do |coords, organ|
-        paths_from_source_to_organs << arena.shortest_path(path.last, coords)
+    paths_to_sources.each do |path|
+      organs_in_cluster.each do |coords, organ|
+        short_path = arena.shortest_path(path.last, coords, excluding: Entity.available_sources("A").keys)
+
+        next if short_path.nil? || !at_distance.include?(arena.path_length(short_path))
+
+        paths_from_source_to_organs << short_path if short_path
+      end
+    end
+
+    if paths_from_source_to_organs.none?
+      debug("Looks like there's no way to get to A sources without stepping on other A sources, lol")
+
+      paths_to_sources.each do |path|
+        organs_in_cluster.each do |coords, organ|
+          short_path = arena.shortest_path(path.last, coords)
+
+          next if short_path.nil? || !at_distance.include?(arena.path_length(short_path))
+
+          paths_from_source_to_organs << short_path if short_path
+        end
       end
     end
 
