@@ -26,11 +26,13 @@ class Controller
   attr_reader :actions
   attr_reader :cells_of_contention, :width_of_contention
   attr_reader :new_root_for_next_turn # memo for multi-move strat
+  attr_reader :deactivated_roots
 
   def initialize(width:, height:)
     @width = width
     @height = height
     @turn = 0
+    @deactivated_roots = []
   end
 
   # @param entities Hash
@@ -62,17 +64,17 @@ class Controller
       # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
-        connect_to_a(coords, root)
-        grow_defensive_tentacle(coords, root) if actions.size < i.next && i.zero? # only furthest grows tentacles
-        spore_and_colonize(coords, root) if actions.size < i.next && i.zero? && can_afford_new_colony?
-        expand_towards_middle(coords, root) unless actions.size >= i.next
-        grow_in_closest_empty_cell(coords, root) unless actions.size >= i.next
-        wait unless actions.size >= i.next
+        connect_to_a(coords, root) if active?(coords)
+        grow_defensive_tentacle(coords, root) if active?(coords) && actions.size < i.next && i.zero? # only furthest grows tentacles
+        spore_and_colonize(coords, root) if active?(coords) && actions.size < i.next && i.zero? && can_afford_new_colony?
+        expand_towards_middle(coords, root) if active?(coords) && actions.size < i.next
+        grow_in_closest_empty_cell(coords, root) if active?(coords) && actions.size < i.next
+        wait(coords, root) unless actions.size >= i.next
       end
     end
 
     debug("Took #{(time * 1000).round}ms to execute", 3)
-    raise("Took too long!") if (time * 1000).round > 50 # 50ms per turn, very thight
+    raise("Took too long!") if (time * 1000).round > 55 # 50ms per turn, very thight
 
     actions.reverse
   end
@@ -387,7 +389,9 @@ class Controller
     @actions << "GROW #{lowest_id_neighbor.last[:id]} #{growth_cell.x} #{growth_cell.y} #{BASIC}"
   end
 
-  def wait
+  def wait(coords, root)
+    debug("Root #{coords} waiting. Deactivating further actions.")
+    @deactivated_roots << coords
     @actions << "WAIT"
   end
 
@@ -635,6 +639,10 @@ class Controller
     @width_of_contention = path.size.even? ? 2 : 1
 
     nil
+  end
+
+  def active?(coords)
+    !@deactivated_roots.include?(coords)
   end
 
   def debug_entities
