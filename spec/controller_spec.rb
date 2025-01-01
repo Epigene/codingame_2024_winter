@@ -45,7 +45,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns actions to spread Eastward to eventually start eating the A source" do
-          is_expected.to eq(["GROW 1 4 2 BASIC"])
+          is_expected.to eq(["GROW 1 2 2 BASIC"])
         end
       end
 
@@ -1088,6 +1088,18 @@ RSpec.describe Controller, instance_name: :controller do
       it "returns a command to spore and get to A soon" do
         # is_expected.to eq(["GROW 2 15 6 SPORER W"]) # TODO, could spore aggresively
         is_expected.to eq(["GROW 2 15 6 BASIC"])
+      end
+
+      context "when broken out of protein prison by growing to [15, 6] with ultimate goal to harvest [13, 5]" do
+        let(:options) do
+          x = super()
+          x[:entities][P[15, 6]] = {:type=>"BASIC", :owner=>1, :id=>3, :dir=>"N", :parent_id=>2, :root_id=>2}
+          x
+        end
+
+        it "returns a command to continue growing towards [13, 5]" do
+          is_expected.to eq(["GROW 3 14 6 BASIC"])
+        end
       end
 
       context "when the arena is changed a bit in that [15, 6] has A, not C" do

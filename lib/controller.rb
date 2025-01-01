@@ -107,9 +107,16 @@ class Controller
       return
     end
 
-    path = path_to_closest_A(from: [coords, root])
+    paths = paths_to_closest_A(from: [coords, root])
+    return if paths.none?
 
-    return if path.nil?
+    # Trying to deal with sources of A right next to my organs and needing to loop
+    path =
+      if paths.first.size == 2
+        paths.select { _1.size > 2 }.first || paths.first
+      else
+        paths.first
+      end
 
     if path.size > 6 && can_afford_new_colony? # sporing good idea
       debug("Detected far A source, sporing")
@@ -139,8 +146,8 @@ class Controller
         sporer_cell: cell_to_grow_spore
       }
     elsif path.size > 3
-      debug("Close source of A detected at #{path.last}, growing towards it")
-      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-3].x} #{path[-3].y} BASIC"
+      debug("Reachable source of A detected at #{path.last}, growing towards it")
+      @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} BASIC"
     elsif path.size == 3
       debug("Close source of A detected at #{path.last}, setting up a harvester")
       @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
@@ -170,9 +177,10 @@ class Controller
       shortest_path = paths.sort_by { _1.size }.first
 
       path_to_other_source = path_to_closest_A(from: [coords, root], at_distance: 2..)
+
       shortest_path = path_to_other_source if path_to_other_source && shortest_path.size > path_to_other_source.size
 
-      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{shortest_path[1].x} #{shortest_path[1].y} #{BASIC}"
+      @actions << "GROW #{Entity[shortest_path.first][:id]} #{shortest_path[1].x} #{shortest_path[1].y} #{BASIC}"
     end
   end
 
@@ -478,21 +486,13 @@ class Controller
   #
   # @param from Array # [coords, root]
   # @param at_distance Range
-  # @return [Array<Point>, nil]
-  def path_to_closest_A(from:, at_distance: 1..)
-    if harvestable_source = (cells_2_away_from_my_organs(root_id: from.last[:id]) & Entity.available_sources("A").keys).first
-      path = closest_path_to_my_organs(from: harvestable_source).reverse
-      if path.size == 2 # we have organs next to source already
-        path = closest_path_to_my_organs(from: harvestable_source, excluding: [path.first]).reverse
-      end
-
-      return path
-    end
-
+  # @return Array<Array<Point>,nil>
+  def paths_to_closest_A(from:, at_distance: 1..)
     paths_to_sources = paths_to_sources(from: from, source_type: "A")
 
     # dropping very last option as too far in mirror cases
     paths_to_sources = paths_to_sources[0..-2] if paths_to_sources.size > 1
+    paths_to_sources.select! { at_distance.include?(arena.path_length(_1)) }
 
     organs_in_cluster = Entity.my_organs(root_id: from.last[:id])
 
@@ -500,7 +500,7 @@ class Controller
 
     paths_to_sources.each do |path|
       organs_in_cluster.each do |coords, organ|
-        short_path = arena.shortest_path(path.last, coords, excluding: Entity.available_sources("A").keys)
+        short_path = arena.shortest_path(path.last, coords, excluding: Entity.available_sources("A").keys + Entity.organs.keys)
 
         next if short_path.nil? || !at_distance.include?(arena.path_length(short_path))
 
@@ -513,7 +513,7 @@ class Controller
 
       paths_to_sources.each do |path|
         organs_in_cluster.each do |coords, organ|
-          short_path = arena.shortest_path(path.last, coords)
+          short_path = arena.shortest_path(path.last, coords, excluding: Entity.organs.keys)
 
           next if short_path.nil? || !at_distance.include?(arena.path_length(short_path))
 
@@ -522,7 +522,16 @@ class Controller
       end
     end
 
-    paths_from_source_to_organs.sort_by { arena.path_length(_1) }.first&.reverse
+    paths_from_source_to_organs.sort_by { arena.path_length(_1) }.map(&:reverse)
+  end
+
+  # Paradoxically, sources 2 away are better than ones next to organs
+  #
+  # @param from Array # [coords, root]
+  # @param at_distance Range
+  # @return [Array<Point>, nil]
+  def path_to_closest_A(from:, at_distance: 1..)
+    paths_to_closest_A(from: from, at_distance: at_distance).first
   end
 
   def can_afford_new_colony?
