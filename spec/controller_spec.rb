@@ -1242,6 +1242,42 @@ RSpec.describe Controller, instance_name: :controller do
         end
       end
     end
+
+    context "when seed=3156051537801494500, a 24x12 open arena with A too far basic growing" do
+      let(:width_and_height) { {width: 24, height: 12} }
+
+      let(:options) do
+        {
+          entities: {
+            P[5, 0] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 1] => {:type=>"ROOT", :owner=>0, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            P[4, 2] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 4] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[2, 4] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 4] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 5] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 5] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[21, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[2, 6] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[10, 6] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[19, 6] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[10, 7] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[21, 7] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[23, 7] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[19, 9] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[23, 10] => {:type=>"ROOT", :owner=>1, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            P[18, 11] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            # Walls IDs:
+            **walls([P[0, 0], P[14, 0], P[2, 1], P[4, 1], P[6, 1], P[13, 1], P[14, 1], P[17, 1], P[22, 1], P[5, 2], P[10, 2], P[11, 2], P[15, 2], P[19, 2], P[21, 2], P[11, 3], P[20, 3], P[21, 3], P[7, 5], P[9, 5], P[19, 5], P[4, 6], P[14, 6], P[16, 6], P[2, 8], P[3, 8], P[12, 8], P[2, 9], P[4, 9], P[8, 9], P[12, 9], P[13, 9], P[18, 9], P[1, 10], P[6, 10], P[9, 10], P[10, 10], P[17, 10], P[19, 10], P[21, 10], P[9, 11], P[23, 11]])
+          },
+          my_stock: {:a=>3, :b=>4, :c=>9, :d=>5}, opp_stock: {:a=>3, :b=>4, :c=>9, :d=>5}, required_actions: 1
+        }
+      end
+
+      it "returns a command to spore" do
+        is_expected.to eq(["GROW 2 22 10 SPORER N"])
+      end
+    end
   end
 
   # @return Hash

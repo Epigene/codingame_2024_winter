@@ -130,28 +130,38 @@ class Controller
         paths.first
       end
 
-    if path.size > 6 && can_afford_new_colony? # sporing good idea
-      debug("Detected far A source, sporing")
+    if (path.size > 6 || path.size > my_stock[:a]) && can_afford_new_colony? # sporing good idea
+      debug("Detected far A source, will try sporing")
 
-      places_for_new_root = arena.cells_at_distance(path.last, 2..2)
+      new_root_cell = nil
+      cells_i_can_reach = cells_on_same_row_or_column_as_i_can_reach
+      path_index = paths.index(path)
 
-      new_root_cell =
-        (places_for_new_root & cells_on_same_row_or_column_as_i_can_reach).sort_by do |cell|
-          arena.shortest_path(cell, coords).size
-        end.last
+      paths[path_index..].each do |path|
+        break if new_root_cell
+        places_for_new_root = arena.cells_at_distance(path.last, 2..2)
 
-      if new_root_cell.nil?
-        debug("Hmm, A sources are far, and I can't seem to spore to any of them (diff of more than 2 in both x and y)")
-        return
+        new_root_cell =
+          (places_for_new_root & cells_i_can_reach).sort_by do |cell|
+            arena.shortest_path(cell, coords).size
+          end.last
+
+        if new_root_cell.nil?
+          debug("Hmm, A source at #{path.last} is far, and I can't seem to spore to it comfortably (diff of more than 2 in both x and y)")
+        end
       end
 
       cell_to_grow_spore = cells_next_to_my_organs.find { |cell| cell.x == new_root_cell.x || cell.y == new_root_cell.y }
 
-      raise("D'oh, can't seem to be able to spore to protein source right away.") if cell_to_grow_spore.nil?
+      if cell_to_grow_spore.nil?
+        debug("D'oh, can't seem to be able to spore to protein source right away.")
+        return
+      end
 
       parent_cell = (arena.neighbors(cell_to_grow_spore) & Entity.my_organs.keys).first
       direction = arena.direction(cell_to_grow_spore, new_root_cell)
 
+      debug("Growing a SPORER to reach a far A source")
       @actions << "GROW #{Entity.my_organs[parent_cell][:id]} #{cell_to_grow_spore.x} #{cell_to_grow_spore.y} #{SPORER} #{direction}"
       @new_root_for_next_turn = {
         new_root_cell: new_root_cell,
@@ -309,7 +319,12 @@ class Controller
       end
 
       if Entity[target] && Entity.organs[target]
-        debug("Oops, there's an organ at sporing target, skipping sporing..")
+        debug("Oops, there's an organ at sporing target, trying a closer target")
+        target = best_row[best_row.size / 2]
+      end
+
+      if Entity[target] && Entity.organs[target]
+        debug("Oops, there's an organ at middle sporing target, giving up")
         return
       end
 
