@@ -39,6 +39,12 @@ class Entity
     sources(types).except(*cells_harvested)
   end
 
+  # @return Hash
+  def self.harvested_sources(types = SOURCES)
+    cells_harvested = my_harvesters.map { |k, v| new(k, v).harvested_cell }
+    sources(types).slice(*cells_harvested)
+  end
+
   def self.organs
     all.select { |coords, entity| entity[:owner] >= 0 }
   end

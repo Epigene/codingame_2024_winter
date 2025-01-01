@@ -33,4 +33,22 @@ RSpec.describe Entity, instance_name: :entity do
       end
     end
   end
+
+  describe ".harvested_sources(types = SOURCES)" do
+    subject(:harvested_sources) { described_class.harvested_sources }
+
+    context "when there are harvesters" do
+      let(:entities) do
+        {
+          Point[0, 0] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+          Point[1, 1] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+          Point[1, 0] => {:type=>"HARVESTER", :owner=>1, :id=>6, :dir=>"W", :parent_id=>5, :root_id=>1},
+        }
+      end
+
+      it "returns .sources with a harvester 'eating' 'em" do
+        expect(harvested_sources.keys).to eq([Point[0, 0]])
+      end
+    end
+  end
 end

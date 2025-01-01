@@ -62,7 +62,7 @@ class Controller
       # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
-        connect_to_a(coords, root) if i.zero?
+        connect_to_a(coords, root)
         grow_defensive_tentacle(coords, root) if actions.size < i.next && i.zero? # only furthest grows tentacles
         spore_and_colonize(coords, root) if actions.size < i.next && i.zero? && can_afford_new_colony?
         expand_towards_middle(coords, root) unless actions.size >= i.next
@@ -93,6 +93,11 @@ class Controller
   private
 
   def connect_to_a(coords, root)
+    if action = @actions.find { _1[HARVESTER] }
+      debug("Looks like another root is going for a harvester via '#{action}'")
+      return
+    end
+
     if Entity.my_harvesters.size >= Entity.my_roots.size
       debug("A source of A for each root is being harvested, moving on with the strat.")
       return
@@ -109,6 +114,11 @@ class Controller
 
     paths = paths_to_closest_A(from: [coords, root])
     return if paths.none?
+
+    if Entity.my_harvesters.size > 0 && paths.first.size > 4
+      debug("Root at #{coords} quite far from A sources, skipping")
+      return
+    end
 
     # Trying to deal with sources of A right next to my organs and needing to loop
     path =
@@ -366,10 +376,11 @@ class Controller
 
   # Backfilling action. Once we've established teritorrial dominance, just grow in backyard.
   def grow_in_closest_empty_cell(coords, root)
-    growth_cell = cells_for_my_expansion.first
+    excludes = turn < 90 ? Entity.sources.keys : []
+    growth_cell = cells_for_my_expansion(root_id: root[:id], exclude: excludes).first
     return unless growth_cell
 
-    debug("Peacibly growing in the backyard")
+    debug("Peacibly growing in the backyard at [#{growth_cell.x}, #{growth_cell.y}]")
     lowest_id_neighbor = Entity.my_organs.slice(*arena.cells_at_distance(growth_cell, 1..1))
       .sort_by { |coords, entity| entity[:id] }.first
 
@@ -421,9 +432,15 @@ class Controller
   # Return candidates for backfilling, sorted descending by most neighbors and closeness to root
   #
   # @return Array<Point>
-  def cells_for_my_expansion
-    (cells_next_to_my_organs - Entity.sources.keys).sort_by do |cell|
-      [-my_neighboring_organ_count(cell), arena.shortest_path(cell, my_roots.first.first).size]
+  def cells_for_my_expansion(root_id: nil, exclude: nil)
+    exclude ||= Entity.sources.keys
+
+    # calculating distances for very many options is expensive, so limiting to first 20 options
+    (cells_next_to_my_organs(root_id: root_id) - exclude).first(20).sort_by do |cell|
+      [
+        -my_neighboring_organ_count(cell),
+        arena.shortest_path(cell, my_roots.first.first).size
+      ]
     end
   end
 
@@ -456,6 +473,7 @@ class Controller
       return
     end
 
+    action = nil
     midpoint.downto(1).each do |index|
       next unless Entity.organs[path[index]].nil?
 
@@ -464,9 +482,16 @@ class Controller
 
       break unless parent[:root_id] == root[:root_id]
 
-      debug("Growing towards the middle")
-      @actions << "GROW #{parent[:id]} #{path[index].x} #{path[index].y} BASIC"
+
+      action = "GROW #{parent[:id]} #{path[index].x} #{path[index].y} BASIC"
       break
+    end
+
+    if action
+      debug("Growing towards the middle")
+      @actions << action
+    else
+      debug("Root #{coords} not on path to mid")
     end
   end
 
@@ -491,6 +516,9 @@ class Controller
   # @param from Array # [coords, root]
   # @return [Array[coords, source], nil]
   def paths_to_sources(from:, source_type: "A")
+    # debug("Available sources: #{Entity.available_sources(source_type)}")
+    # debug("Harvested sources: #{Entity.harvested_sources(source_type)}")
+
     sources = Entity.available_sources(source_type)
 
     sources

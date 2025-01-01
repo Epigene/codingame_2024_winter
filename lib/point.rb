@@ -60,11 +60,11 @@ class Point
   end
 
   def n
-    Point[x, y.next]
+    Point[x, y - 1]
   end
 
   def s
-    Point[x, y-1]
+    Point[x, y.next]
   end
 
   def hash
