@@ -21,7 +21,7 @@ class Controller
   attr_reader :entities, :my_stock, :opp_stock, :required_actions
 
   attr_reader :arena # Grid object
-  attr_reader :my_organs, :my_roots, :my_harvesters
+  attr_reader :my_roots
   attr_reader :opp_organs, :opp_roots, :opp_harvesters
   attr_reader :actions
   attr_reader :cells_of_contention, :width_of_contention
@@ -49,9 +49,7 @@ class Controller
     promising_rows # this may be left for lazyload, but early probably better
     @turn += 1
 
-    @my_organs = entities.select { |coords, entity| entity[:owner] == 1 }
     @my_roots = Entity.my_roots # my_organs.select { |coords, entity| entity[:type] == ROOT }
-    @my_harvesters = entities.select { |coords, entity| entity[:type] == HARVESTER }
     @opp_organs = entities.select { |coords, entity| entity[:owner] == 0 }
     @opp_roots = opp_organs.select { |coords, entity| entity[:type] == ROOT }.sort_by { |_, root| root[:id ]}
     initialize_cells_of_contention
@@ -60,7 +58,7 @@ class Controller
     @time_taken = 0
     time = Benchmark.realtime do
       # debug_stocks
-      # debug_entities
+      debug_entities
       # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
@@ -214,6 +212,8 @@ class Controller
       if best_candidates.any?
         candidate = best_candidates.first
         parent = Entity[(arena.cells_at_distance(candidate, 1..1) & Entity.my_organs(root_id: root[:id]).keys).first]
+        return if parent.nil? # This can occur if other root actually reached mid
+
         path_to_opp = closest_path_to_opp_organs(from: candidate)
         direction = arena.direction(*path_to_opp.first(2))
 
@@ -323,7 +323,7 @@ class Controller
   end
 
   def closest_path_to_my_organs(from:, excluding: nil)
-    my_organs.keys.filter_map do |my_organ_coords|
+    Entity.my_organs.keys.filter_map do |my_organ_coords|
       next if excluding && excluding.include?(my_organ_coords)
 
       arena.shortest_path(from, my_organ_coords, excluding: excluding)
@@ -340,7 +340,7 @@ class Controller
   def contentious_cells_at_distance(range)
     cells_at_distance = Set.new
 
-    my_organs.keys.each do |organ_coord|
+    Entity.my_organs.keys.each do |organ_coord|
       cells_at_distance += arena.cells_at_distance(organ_coord, range)
     end
 
@@ -411,7 +411,7 @@ class Controller
   end
 
   def my_latest_organ(root_id:)
-    my_organs.select { |k, v| v[:root_id] == root_id }.sort_by { |k, v| -v[:id] }.first
+    Entity.my_organs.select { |k, v| v[:root_id] == root_id }.sort_by { |k, v| -v[:id] }.first
   end
 
   # @param from Array # [coords, root]
@@ -517,8 +517,8 @@ class Controller
 
   def debug_entities
     debug "Entities:"
-    # @entities.to_a.last(25).each do |coords, entity|
-    @entities.each do |coords, entity|
+    @entities.to_a.last(25).each do |coords, entity|
+    # @entities.each do |coords, entity|
       debug("#{coords} => #{entity},") if entity[:type] != WALL
     end
   end
