@@ -1179,7 +1179,8 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns commands to grow with both roots" do
-          is_expected.to eq(["GROW 1 0 3 BASIC", "GROW 10 7 3 TENTACLE E"])
+          # is_expected.to eq(["GROW 1 0 3 BASIC", "GROW 10 7 3 TENTACLE E"]) # would be nice to allow 1st root to grow for another A, but costly
+          is_expected.to eq(["GROW 7 3 2 BASIC", "GROW 10 7 3 TENTACLE E"])
         end
       end
     end
@@ -1295,6 +1296,78 @@ RSpec.describe Controller, instance_name: :controller do
         it "returns commands to grow harvester and maybe new spore" do
           is_expected.to eq(["GROW 4 22 9 BASIC", "GROW 6 22 5 HARVESTER W"])
         end
+      end
+    end
+
+    context "when seed=8896538624446524000, a large 24x12 arena" do
+      let(:width_and_height) { {width: 24, height: 12} }
+
+      let(:options) do
+        {
+          entities: {
+            P[1, 0] => {:type=>"ROOT", :owner=>0, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            P[2, 0] => {:type=>"BASIC", :owner=>0, :id=>9, :dir=>"N", :parent_id=>1, :root_id=>1},
+            P[11, 0] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[12, 0] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[21, 0] => {:type=>"BASIC", :owner=>1, :id=>8, :dir=>"N", :parent_id=>2, :root_id=>2},
+            P[22, 0] => {:type=>"ROOT", :owner=>1, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            P[1, 1] => {:type=>"BASIC", :owner=>0, :id=>3, :dir=>"N", :parent_id=>1, :root_id=>1},
+            P[2, 1] => {:type=>"BASIC", :owner=>0, :id=>6, :dir=>"N", :parent_id=>3, :root_id=>1},
+            P[18, 1] => {:type=>"ROOT", :owner=>1, :id=>5, :dir=>"N", :parent_id=>0, :root_id=>5},
+            P[21, 1] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[22, 1] => {:type=>"SPORER", :owner=>1, :id=>4, :dir=>"W", :parent_id=>2, :root_id=>2},
+            P[6, 2] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[17, 2] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[18, 2] => {:type=>"HARVESTER", :owner=>1, :id=>7, :dir=>"W", :parent_id=>5, :root_id=>5},
+            P[5, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[11, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[12, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[18, 3] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 4] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[3, 4] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 4] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[6, 4] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[17, 4] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[19, 4] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[20, 4] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[23, 4] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[1, 5] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[3, 5] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[6, 5] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[17, 5] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[20, 5] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[22, 5] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[3, 6] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 6] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[5, 6] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[7, 6] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[16, 6] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[18, 6] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[19, 6] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[20, 6] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 8] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 8] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[6, 8] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[17, 8] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[19, 8] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[23, 8] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[2, 9] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[21, 9] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[7, 10] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[16, 10] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 11] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 11] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[19, 11] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[23, 11] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            # Walls IDs:
+            **walls([P[0, 0], P[10, 0], P[13, 0], P[23, 0], P[7, 1], P[8, 1], P[9, 1], P[14, 1], P[15, 1], P[16, 1], P[1, 2], P[10, 2], P[13, 2], P[22, 2], P[0, 3], P[1, 3], P[7, 3], P[10, 3], P[13, 3], P[16, 3], P[22, 3], P[23, 3], P[1, 4], P[5, 4], P[10, 4], P[13, 4], P[18, 4], P[22, 4], P[2, 5], P[5, 5], P[9, 5], P[14, 5], P[18, 5], P[21, 5], P[2, 6], P[11, 6], P[12, 6], P[21, 6], P[2, 7], P[6, 7], P[7, 7], P[11, 7], P[12, 7], P[16, 7], P[17, 7], P[21, 7], P[8, 8], P[9, 8], P[11, 8], P[12, 8], P[14, 8], P[15, 8], P[4, 9], P[8, 9], P[10, 9], P[11, 9], P[12, 9], P[13, 9], P[15, 9], P[19, 9], P[2, 10], P[3, 10], P[4, 10], P[6, 10], P[11, 10], P[12, 10], P[17, 10], P[19, 10], P[20, 10], P[21, 10], P[2, 11], P[3, 11], P[8, 11], P[15, 11], P[20, 11], P[21, 11]])
+          },
+          my_stock: {:a=>8, :b=>6, :c=>4, :d=>3}, opp_stock: {:a=>8, :b=>6, :c=>4, :d=>3}, required_actions: 2
+        }
+      end
+
+      it "returns commands in reasonable time" do
+        is_expected.to eq(["GROW 8 21 1 BASIC", "GROW 7 18 3 BASIC"])
       end
     end
   end

@@ -65,7 +65,7 @@ class Controller
       # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
-        connect_to_a(coords, root) if active?(coords)
+        connect_to_a(coords, root) if active?(coords) && i.zero? # only latest root can search As, for time
         grow_defensive_tentacle(coords, root) if active?(coords) && actions.size < i.next && i.zero? # only furthest grows tentacles
         spore_and_colonize(coords, root) if active?(coords) && actions.size < i.next && i.zero? && can_afford_new_colony?
         expand_towards_middle(coords, root) if active?(coords) && actions.size < i.next
@@ -115,7 +115,7 @@ class Controller
       return
     end
 
-    paths = paths_to_closest_A(from: [coords, root])
+    paths = paths_to_As(from: [coords, root])
     return if paths.none?
 
     if Entity.my_harvesters.size > 0 && paths.first.size > 4
@@ -534,29 +534,18 @@ class Controller
     Entity.my_organs.select { |k, v| v[:root_id] == root_id }.sort_by { |k, v| -v[:id] }.first
   end
 
-  # @param from Array # [coords, root]
-  # @return [Array[coords, source], nil]
-  def paths_to_sources(from:, source_type: "A")
-    # debug("Available sources: #{Entity.available_sources(source_type)}")
-    # debug("Harvested sources: #{Entity.harvested_sources(source_type)}")
-
-    sources = Entity.available_sources(source_type)
-
-    sources
-      .map { |coords, source| arena.shortest_path(from.first, coords) }
-      .sort_by { arena.path_length(_1) }
-  end
-
   # Paradoxically, sources 2 away are better than ones next to organs
   #
   # @param from Array # [coords, root]
   # @param at_distance Range
   # @return Array<Array<Point>,nil>
-  def paths_to_closest_A(from:, at_distance: 1..)
+  def paths_to_As(from:, at_distance: 1..)
     paths_to_sources = paths_to_sources(from: from, source_type: "A")
 
-    # dropping very last option as too far in mirror cases
-    paths_to_sources = paths_to_sources[0..-2] if paths_to_sources.size > 1
+    # dropping further half since arenas are mirrored
+    half = (Entity.sources("A").size / 2.0).ceil
+    paths_to_sources = paths_to_sources[0..half]
+
     paths_to_sources.select! { at_distance.include?(arena.path_length(_1)) }
 
     organs_in_cluster = Entity.my_organs(root_id: from.last[:id])
@@ -565,7 +554,7 @@ class Controller
 
     paths_to_sources.each do |path|
       organs_in_cluster.each do |coords, organ|
-        short_path = arena.shortest_path(path.last, coords, excluding: Entity.available_sources("A").keys + Entity.organs.keys)
+        short_path = arena.shortest_path(path.last, coords, excluding: Entity.sources("A").keys + Entity.organs.keys)
 
         next if short_path.nil? || !at_distance.include?(arena.path_length(short_path))
 
@@ -590,13 +579,26 @@ class Controller
     paths_from_source_to_organs.sort_by { arena.path_length(_1) }.map(&:reverse)
   end
 
+  # @param from Array # [coords, root]
+  # @return [Array[coords, source], nil]
+  def paths_to_sources(from:, source_type: "A")
+    # debug("Available sources: #{Entity.available_sources(source_type)}")
+    # debug("Harvested sources: #{Entity.harvested_sources(source_type)}")
+
+    sources = Entity.available_sources(source_type)
+
+    sources
+      .map { |coords, source| arena.shortest_path(from.first, coords, excluding: Entity.harvested_sources("A").keys) }
+      .sort_by { arena.path_length(_1) }
+  end
+
   # Paradoxically, sources 2 away are better than ones next to organs
   #
   # @param from Array # [coords, root]
   # @param at_distance Range
   # @return [Array<Point>, nil]
   def path_to_closest_A(from:, at_distance: 1..)
-    paths_to_closest_A(from: from, at_distance: at_distance).first
+    paths_to_As(from: from, at_distance: at_distance).first
   end
 
   def can_afford_new_colony?
