@@ -351,6 +351,8 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       context "when the 2nd move, need to spore a new root at predetermined position" do
+        let(:controller) { described_class.new(turn: 1, **width_and_height) }
+
         let(:options) do
           {
             entities: {
@@ -368,10 +370,12 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         before do
-          allow(controller).to receive(:new_root_for_next_turn) do
+          allow(controller).to receive(:turn_storage) do
             {
-              new_root_cell: Point[15, 3],
-              sporer_cell: Point[1, 3]
+              2 => {
+                new_root_cell: Point[15, 3],
+                sporer_cell: Point[1, 3]
+              }
             }
           end
         end
@@ -1276,6 +1280,21 @@ RSpec.describe Controller, instance_name: :controller do
 
       it "returns a command to spore" do
         is_expected.to eq(["GROW 2 22 10 SPORER N"])
+      end
+
+      context "when next move, new root spawned" do
+        let(:options) do
+          x = super()
+          x[:entities][P[22, 4]] = {:type=>"ROOT", :owner=>1, :id=>6, :dir=>"N", :parent_id=>0, :root_id=>6}
+          x[:entities][P[22, 10]] = {:type=>"SPORER", :owner=>1, :id=>4, :dir=>"N", :parent_id=>2, :root_id=>2}
+          x[:my_stock] = {:a=>2, :b=>2, :c=>8, :d=>3}
+          x[:required_actions] = 2
+          x
+        end
+
+        it "returns commands to grow harvester and maybe new spore" do
+          is_expected.to eq(["GROW 4 22 9 BASIC", "GROW 6 22 5 HARVESTER W"])
+        end
       end
     end
   end

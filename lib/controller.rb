@@ -17,7 +17,7 @@ class Controller
     ROOT=> {a: 1, b: 1, c: 1, d: 1},
   }
 
-  attr_reader :width, :height, :turn
+  attr_reader :width, :height, :turn, :turn_storage
   attr_reader :entities, :my_stock, :opp_stock, :required_actions
 
   attr_reader :arena # Grid object
@@ -25,13 +25,14 @@ class Controller
   attr_reader :opp_organs, :opp_roots, :opp_harvesters
   attr_reader :actions
   attr_reader :cells_of_contention, :width_of_contention
-  attr_reader :new_root_for_next_turn # memo for multi-move strat
   attr_reader :deactivated_roots
 
-  def initialize(width:, height:)
+  def initialize(width:, height:, turn: 0)
     @width = width
     @height = height
-    @turn = 0
+    @turn = turn
+    @turn_storage = Hash.new { |hash, key| hash[key] = {} }
+
     @deactivated_roots = []
   end
 
@@ -105,12 +106,12 @@ class Controller
       return
     end
 
-    if new_root_for_next_turn
-      sporer = Entity.my_organs[new_root_for_next_turn[:sporer_cell]]
-      new_root_cell = new_root_for_next_turn[:new_root_cell]
+    if turn_storage.dig(turn, :new_root_cell)
+      sporer = Entity[turn_storage.dig(turn, :sporer_cell)]
+      new_root_cell = turn_storage.dig(turn, :new_root_cell)
       @actions << "SPORE #{sporer[:id]} #{new_root_cell.x} #{new_root_cell.y}"
 
-      @new_root_for_next_turn = nil
+      turn_storage[turn].merge!(new_root_cell: nil, sporer_cell: nil)
       return
     end
 
@@ -130,7 +131,10 @@ class Controller
         paths.first
       end
 
-    if (path.size > 6 || path.size > my_stock[:a]) && can_afford_new_colony? # sporing good idea
+    if path.size == 3
+      debug("Close source of A detected at #{path.last}, setting up a harvester")
+      @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
+    elsif (path.size > 6 || path.size > my_stock[:a]) && can_afford_new_colony? # sporing good idea
       debug("Detected far A source, will try sporing")
 
       new_root_cell = nil
@@ -162,17 +166,15 @@ class Controller
       direction = arena.direction(cell_to_grow_spore, new_root_cell)
 
       debug("Growing a SPORER to reach a far A source")
-      @actions << "GROW #{Entity.my_organs[parent_cell][:id]} #{cell_to_grow_spore.x} #{cell_to_grow_spore.y} #{SPORER} #{direction}"
-      @new_root_for_next_turn = {
+      @actions << "GROW #{Entity[parent_cell][:id]} #{cell_to_grow_spore.x} #{cell_to_grow_spore.y} #{SPORER} #{direction}"
+
+      turn_storage[turn.next] = {
         new_root_cell: new_root_cell,
         sporer_cell: cell_to_grow_spore
       }
     elsif path.size > 3
       debug("Reachable source of A detected at #{path.last}, growing towards it")
       @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} BASIC"
-    elsif path.size == 3
-      debug("Close source of A detected at #{path.last}, setting up a harvester")
-      @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
     elsif (cells = cells_for_harvester(root, source_type: "A")).one?
       debug("Source of A already next-door detected at #{path.last}, setting up a harvester")
       direction = arena.direction(cells.first, path.last)
