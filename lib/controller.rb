@@ -60,8 +60,8 @@ class Controller
     @time_taken = 0
     time = Benchmark.realtime do
       # debug_stocks
-      debug_entities
-      debug_walls
+      # debug_entities
+      # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
         connect_to_a(coords, root) if i.zero?
@@ -81,14 +81,10 @@ class Controller
   private
 
   def connect_to_a(coords, root)
-    if my_harvesters.any?
-      debug("Source of A being harvested, moving on with the strat.")
+    if Entity.my_harvesters.size >= Entity.my_roots.size
+      debug("A source of A for each root is being harvested, moving on with the strat.")
       return
     end
-
-    path = path_to_closest_A(from: [coords, root])
-
-    return if path.nil?
 
     if new_root_for_next_turn
       sporer = Entity.my_organs[new_root_for_next_turn[:sporer_cell]]
@@ -96,7 +92,14 @@ class Controller
       @actions << "SPORE #{sporer[:id]} #{new_root_cell.x} #{new_root_cell.y}"
 
       @new_root_for_next_turn = nil
-    elsif path.size > 6 && can_afford_new_colony? # sporing good idea
+      return
+    end
+
+    path = path_to_closest_A(from: [coords, root])
+
+    return if path.nil?
+
+    if path.size > 6 && can_afford_new_colony? # sporing good idea
       debug("Detected far A source, sporing")
 
       places_for_new_root = arena.cells_at_distance(path.last, 2..2)
@@ -128,7 +131,7 @@ class Controller
       @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-3].x} #{path[-3].y} BASIC"
     elsif path.size == 3
       debug("Close source of A detected at #{path.last}, setting up a harvester")
-      @actions << "GROW #{my_latest_organ(root_id: root[:id]).last[:id]} #{path[-2].x} #{path[-2].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
+      @actions << "GROW #{Entity[path.first][:id]} #{path[1].x} #{path[1].y} #{HARVESTER} #{arena.direction(*path.last(2))}"
     elsif (cells = cells_for_harvester(root, source_type: "A")).one?
       debug("Source of A already next-door detected at #{path.last}, setting up a harvester")
       direction = arena.direction(cells.first, path.last)
@@ -321,6 +324,8 @@ class Controller
 
   def closest_path_to_my_organs(from:, excluding: nil)
     my_organs.keys.filter_map do |my_organ_coords|
+      next if excluding && excluding.include?(my_organ_coords)
+
       arena.shortest_path(from, my_organ_coords, excluding: excluding)
     end.sort_by(&:size).first
   end
@@ -412,7 +417,7 @@ class Controller
   # @param from Array # [coords, root]
   # @return [Array[coords, source], nil]
   def paths_to_sources(from:, source_type: "A")
-    sources = Entity.sources.select { |coords, source| source[:type] == source_type }
+    sources = Entity.available_sources(source_type)
 
     sources
       .map { |coords, source| arena.shortest_path(from.first, coords) }
@@ -424,8 +429,13 @@ class Controller
   # @param from Array # [coords, root]
   # @return [Array<Point>, nil]
   def path_to_closest_A(from:)
-    if harvestable_source = (cells_2_away_from_my_organs(root_id: from.last[:id]) & Entity.sources("A").keys).first
-      return closest_path_to_my_organs(from: harvestable_source).reverse
+    if harvestable_source = (cells_2_away_from_my_organs(root_id: from.last[:id]) & Entity.available_sources("A").keys).first
+      path = closest_path_to_my_organs(from: harvestable_source).reverse
+      if path.size == 2 # we have organs next to source already
+        path = closest_path_to_my_organs(from: harvestable_source, excluding: [path.first]).reverse
+      end
+
+      return path
     end
 
     paths_to_sources = paths_to_sources(from: from, source_type: "A")

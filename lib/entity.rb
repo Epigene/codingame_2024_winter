@@ -33,10 +33,10 @@ class Entity
   end
 
   # Differs from .sources in that sources already harvested by me are omitted
-  def self.available_sources
+  def self.available_sources(types = SOURCES)
     cells_harvested = my_harvesters.map { |k, v| new(k, v).harvested_cell }
 
-    sources.except(*cells_harvested)
+    sources(types).except(*cells_harvested)
   end
 
   def self.organs
@@ -56,11 +56,11 @@ class Entity
   end
 
   def self.my_roots
-    my_organs.select { |coords, entity| entity[:type] == ROOT }.sort_by { |_, root| root[:id ]}
+    my_organs.select { |coords, entity| entity[:type] == ROOT }.sort_by { |_, root| root[:id ]}.to_h
   end
 
   def self.my_harvesters
-    my_organs.select { |coords, entity| entity[:type] == HARVESTER }.sort_by { |_, root| root[:id ]}
+    my_organs.select { |coords, entity| entity[:type] == HARVESTER }.sort_by { |_, root| root[:id ]}.to_h
   end
 
   # @return Hash

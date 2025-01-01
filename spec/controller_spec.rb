@@ -675,8 +675,7 @@ RSpec.describe Controller, instance_name: :controller do
         end
 
         it "returns commands to capture nearby A and grow towards mid" do
-          # is_expected.to eq(["GROW 6 2 2","GROW 7 7 1 HARVESTER W"])
-          is_expected.to eq(["GROW 1 1 0 BASIC", "GROW 7 8 2 TENTACLE E"])
+          is_expected.to eq(["GROW 1 1 0 BASIC","GROW 7 7 1 HARVESTER W"])
         end
       end
     end
@@ -886,6 +885,44 @@ RSpec.describe Controller, instance_name: :controller do
       it "returns a command to grow a sporer facing West" do
         # is_expected.to eq(["GROW 99 13 8 SPORER W"])
         is_expected.to eq(["GROW 4 17 5 BASIC"])
+      end
+    end
+
+    context "when a real (and sparse) 22x11 arena with far A source(s)" do
+      let(:width_and_height) { {width: 22, height: 11} }
+
+      let(:options) do
+        {
+          entities: {
+            P[5, 0] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[2, 1] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            P[3, 1] => {:type=>"SPORER", :owner=>1, :id=>4, :dir=>"S", :parent_id=>1, :root_id=>1},
+            P[4, 1] => {:type=>"BASIC", :owner=>1, :id=>9, :dir=>"N", :parent_id=>4, :root_id=>1},
+            P[5, 1] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[8, 1] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 2] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[17, 4] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[3, 5] => {:type=>"ROOT", :owner=>1, :id=>5, :dir=>"N", :parent_id=>0, :root_id=>5},
+            P[4, 5] => {:type=>"HARVESTER", :owner=>1, :id=>7, :dir=>"E", :parent_id=>5, :root_id=>5},
+            P[5, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[16, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[18, 5] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 6] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[18, 7] => {:type=>"BASIC", :owner=>0, :id=>8, :dir=>"E", :parent_id=>6, :root_id=>2},
+            P[18, 8] => {:type=>"BASIC", :owner=>0, :id=>6, :dir=>"N", :parent_id=>3, :root_id=>2},
+            P[19, 8] => {:type=>"BASIC", :owner=>0, :id=>3, :dir=>"E", :parent_id=>2, :root_id=>2},
+            P[21, 8] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 9] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[16, 9] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[19, 9] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            P[16, 10] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+          },
+          my_stock: {:a=>4, :b=>10, :c=>2, :d=>7}, opp_stock: {:a=>4, :b=>10, :c=>2, :d=>7}, required_actions: 1
+        }
+      end
+
+      it "after placing harvester returns a command to place another harvester since opportune" do
+        is_expected.to eq(["GROW 9 15 1 BASIC", "GROW 5 3 6 HARVESTER E"])
       end
     end
   end
