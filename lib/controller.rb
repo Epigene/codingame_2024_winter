@@ -17,7 +17,7 @@ class Controller
     ROOT=> {a: 1, b: 1, c: 1, d: 1},
   }
 
-  attr_reader :width, :height, :turn, :turn_storage
+  attr_reader :width, :height, :turn, :turn_storage, :time_taken
   attr_reader :entities, :my_stock, :opp_stock, :required_actions
 
   attr_reader :arena # Grid object
@@ -65,17 +65,40 @@ class Controller
       # debug_walls
 
       my_roots.to_a.reverse.each.with_index do |(coords, root), i|
-        connect_to_a(coords, root) if active?(coords) && i.zero? # only latest root can search As, for time
-        grow_defensive_tentacle(coords, root) if active?(coords) && actions.size < i.next && i.zero? # only furthest grows tentacles
-        spore_and_colonize(coords, root) if active?(coords) && actions.size < i.next && i.zero? && can_afford_new_colony?
-        expand_towards_middle(coords, root) if active?(coords) && actions.size < i.next
-        grow_in_closest_empty_cell(coords, root) if active?(coords) && actions.size < i.next
-        wait(coords, root) unless actions.size >= i.next
+        @time_taken += t = Benchmark.realtime do
+          connect_to_a(coords, root) if active?(coords) && i.zero? # only latest root can search As, for time
+        end * 1000; debug("A lookup took #{t.round}, total Time taken: #{time_taken.round}")
+
+        wait(coords, root) if actions.size < i.next && time_taken >= 50
+
+        @time_taken += t = Benchmark.realtime do
+          grow_defensive_tentacle(coords, root) if active?(coords) && actions.size < i.next && i.zero? # only furthest grows tentacles
+        end * 1000; debug("Tentacle def took #{t.round}, total Time taken: #{time_taken.round}")
+
+        wait(coords, root) if actions.size < i.next && time_taken >= 50
+
+        @time_taken += t = Benchmark.realtime do
+          spore_and_colonize(coords, root) if active?(coords) && actions.size < i.next && i.zero? && can_afford_new_colony?
+        end * 1000; debug("Colonizing took #{t.round}, total Time taken: #{time_taken.round}")
+
+        wait(coords, root) if actions.size < i.next && time_taken >= 50
+
+        @time_taken += t = Benchmark.realtime do
+          expand_towards_middle(coords, root) if active?(coords) && actions.size < i.next
+        end * 1000; debug("Mid expansion took #{t.round}, total Time taken: #{time_taken.round}")
+
+        wait(coords, root) if actions.size < i.next && time_taken >= 50
+
+        @time_taken += t = Benchmark.realtime do
+          grow_in_closest_empty_cell(coords, root) if active?(coords) && actions.size < i.next
+        end * 1000; debug("Growing in empty cell took #{t.round}, total Time taken: #{time_taken.round}")
+
+        wait(coords, root) if actions.size < i.next
       end
     end
 
     debug("Took #{(time * 1000).round}ms to execute", 3)
-    raise("Took too long!") if (time * 1000).round > 55 # 50ms per turn, very thight
+    raise("Took too long!") if (time * 1000).round > 60 # 50ms per turn, very thight
 
     actions.reverse
   end
@@ -150,7 +173,9 @@ class Controller
             arena.shortest_path(cell, coords).size
           end.last
 
-        if new_root_cell.nil?
+        if new_root_cell
+          debug("Yay, far A source at #{path.last} can be reached by placing a new root at #{new_root_cell}")
+        else
           debug("Hmm, A source at #{path.last} is far, and I can't seem to spore to it comfortably (diff of more than 2 in both x and y)")
         end
       end
@@ -165,7 +190,7 @@ class Controller
       parent_cell = (arena.neighbors(cell_to_grow_spore) & Entity.my_organs.keys).first
       direction = arena.direction(cell_to_grow_spore, new_root_cell)
 
-      debug("Growing a SPORER to reach a far A source")
+      debug("Growing a SPORER to reach a far A source at #{}")
       @actions << "GROW #{Entity[parent_cell][:id]} #{cell_to_grow_spore.x} #{cell_to_grow_spore.y} #{SPORER} #{direction}"
 
       turn_storage[turn.next] = {
