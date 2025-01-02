@@ -238,6 +238,11 @@ class Grid
     path.size - 1
   end
 
+  # @return Integer
+  def mahattan_distance(pointA, pointB)
+    (pointA.x - pointB.x).abs + (pointA.y - pointB.y).abs
+  end
+
   # Useful for finding longest rows in a grid
   #
   # @return Hash # { y => [[P[0, 0], P[1, 0], P[2, 0]]] } each row lists its segment x-es
@@ -274,7 +279,7 @@ class Grid
   end
 
   def neighbors(point)
-    cells_at_distance(point, 1..1)
+    structure[point]
   end
 
   # Returns cells that are specified distance away from a given cell. Useful for telling

@@ -151,6 +151,25 @@ RSpec.describe Grid, instance_name: :grid do
     end
   end
 
+  describe "#mahattan_distance(pointA, pointB)" do
+    subject(:mahattan_distance) { grid.mahattan_distance(*points) }
+
+    context "when a and b are the same point" do
+      let(:points) { [Point[1, 1], Point[1, 1]] }
+      it { is_expected.to eq(0) }
+    end
+
+    context "when A->B is to the lower right" do
+      let(:points) { [Point[0, 0], Point[1, 1]] }
+      it { is_expected.to eq(2) }
+    end
+
+    context "when A->B is to the upper left" do
+      let(:points) { [Point[2, 3], Point[0, 0]] }
+      it { is_expected.to eq(5) }
+    end
+  end
+
   describe "#row_segments" do
     subject(:row_segments) { grid.row_segments }
 

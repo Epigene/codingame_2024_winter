@@ -28,6 +28,39 @@ RSpec.describe Controller, instance_name: :controller do
       end
     end
 
+    context "when walls change after 1st move (from collisions)" do
+      let(:width_and_height) { {width: 2, height: 2} }
+
+      let(:options) do
+        {
+          entities: {
+            Point[0, 0] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            Point[1, 1] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+          },
+          my_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, required_actions: 1
+        }
+      end
+
+      let(:options2) do
+        {
+          entities: {
+            Point[0, 0] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            Point[1, 0] => wall_hash,
+            Point[1, 1] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+          },
+          my_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, opp_stock: {:a=>10, :b=>0, :c=>1, :d=>1}, required_actions: 1
+        }
+      end
+
+      it "updates the game arena by removing now inaccessible cells" do
+        controller.call(**options)
+        expect(controller.arena.nodes.size).to eq(4)
+
+        controller.call(**options2)
+        expect(controller.arena.nodes.size).to eq(3)
+      end
+    end
+
     context "when it's wood-3 simple case of one close A source" do
       context "when just starting out" do
         let(:options) do
@@ -1367,7 +1400,53 @@ RSpec.describe Controller, instance_name: :controller do
       end
 
       it "returns commands in reasonable time" do
-        is_expected.to eq(["GROW 8 21 1 BASIC", "GROW 7 18 3 BASIC"])
+        is_expected.to eq(["GROW 8 20 0 BASIC", "GROW 7 18 3 BASIC"])
+      end
+    end
+
+    context "when seed=-4492962125806262300, an open 18x9 arena with open lines of attack" do
+      let(:width_and_height) { {width: 18, height: 9} }
+
+      let(:options) do
+        {
+          entities: {
+            P[5, 0] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[8, 0] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[4, 2] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[10, 2] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[0, 3] => {:type=>"ROOT", :owner=>1, :id=>1, :dir=>"N", :parent_id=>0, :root_id=>1},
+            P[1, 3] => {:type=>"BASIC", :owner=>1, :id=>3, :dir=>"N", :parent_id=>1, :root_id=>1},
+            P[2, 3] => {:type=>"SPORER", :owner=>1, :id=>7, :dir=>"E", :parent_id=>3, :root_id=>1},
+            P[14, 3] => {:type=>"ROOT", :owner=>1, :id=>9, :dir=>"N", :parent_id=>0, :root_id=>9},
+            P[15, 3] => {:type=>"HARVESTER", :owner=>1, :id=>12, :dir=>"E", :parent_id=>9, :root_id=>9},
+            P[16, 3] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[17, 3] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[1, 4] => {:type=>"HARVESTER", :owner=>1, :id=>5, :dir=>"S", :parent_id=>3, :root_id=>1},
+            P[2, 4] => {:type=>"BASIC", :owner=>1, :id=>11, :dir=>"N", :parent_id=>5, :root_id=>1},
+            P[6, 4] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[11, 4] => {:type=>"D", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[16, 4] => {:type=>"HARVESTER", :owner=>0, :id=>6, :dir=>"N", :parent_id=>4, :root_id=>2},
+            P[17, 4] => {:type=>"HARVESTER", :owner=>0, :id=>4, :dir=>"N", :parent_id=>2, :root_id=>2},
+            P[0, 5] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[1, 5] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[11, 5] => {:type=>"HARVESTER", :owner=>0, :id=>14, :dir=>"N", :parent_id=>10, :root_id=>10},
+            P[12, 5] => {:type=>"ROOT", :owner=>0, :id=>10, :dir=>"N", :parent_id=>0, :root_id=>10},
+            P[15, 5] => {:type=>"BASIC", :owner=>0, :id=>13, :dir=>"N", :parent_id=>8, :root_id=>2},
+            P[16, 5] => {:type=>"SPORER", :owner=>0, :id=>8, :dir=>"W", :parent_id=>2, :root_id=>2},
+            P[17, 5] => {:type=>"ROOT", :owner=>0, :id=>2, :dir=>"N", :parent_id=>0, :root_id=>2},
+            P[7, 6] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[13, 6] => {:type=>"C", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[9, 8] => {:type=>"A", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            P[12, 8] => {:type=>"B", :owner=>-1, :id=>0, :dir=>"X", :parent_id=>0, :root_id=>0},
+            # Walls IDs:
+            **walls([P[15, 1], P[2, 2], P[15, 6], P[2, 7]])
+          },
+          my_stock: {:a=>6, :b=>7, :c=>3, :d=>4}, opp_stock: {:a=>6, :b=>12, :c=>2, :d=>4}, required_actions: 2
+        }
+      end
+
+      it "returns commands to grow and fight" do
+        is_expected.to eq(["GROW 11 3 4 BASIC", "GROW 12 15 4 TENTACLE E"])
       end
     end
   end

@@ -61,6 +61,18 @@ class Entity
     end
   end
 
+  # @return Hash
+  def self.opp_organs(root_id: nil)
+    all.select do |coords, entity|
+      entity[:owner] == 0 &&
+        if root_id
+          entity[:root_id] == root_id
+        else
+          true
+        end
+    end
+  end
+
   def self.my_roots
     my_organs.select { |coords, entity| entity[:type] == ROOT }.sort_by { |_, root| root[:id ]}.to_h
   end
